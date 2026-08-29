@@ -8,7 +8,7 @@ const model = 'bytedance/seedance-2.5';
 
 async function referenceImage(pathname: string) {
   const token = await issueSignedToken({ pathname, operations: ['get'] });
-  const { presignedUrl } = await presignUrl(token, { pathname, operation: 'get', validUntil: Date.now() + 15 * 60 * 1000 });
+  const { presignedUrl } = await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil: Date.now() + 15 * 60 * 1000 });
   return { data: presignedUrl, mediaType: 'image/jpeg' };
 }
 
