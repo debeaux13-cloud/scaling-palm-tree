@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getOwner, requireSignedInOwner } from '../../../../lib/owner';
 import { isProductTier, PRODUCT_TIERS, readOrder, writeOrder } from '../../../../lib/orders';
-import { getStripe, isStripeTestEnvironment } from '../../../../lib/stripe';
+import { getStripe, isStripeConfigured } from '../../../../lib/stripe';
 export async function POST(request: Request) {
-  if (!isStripeTestEnvironment()) return NextResponse.json({ error: 'Checkout is enabled only in Preview and Development test mode.' }, { status: 403 });
+  if (!isStripeConfigured()) return NextResponse.json({ error: 'Checkout is not configured.' }, { status: 503 });
   const signedInOwner = await requireSignedInOwner();
   if (!signedInOwner) return NextResponse.json({ error: 'Create or sign in to your free account to save this movie and continue to checkout.', needsAccount: true }, { status: 401 });
   const { ownerId: currentOwner } = await getOwner(); const { orderId, tier } = await request.json();
