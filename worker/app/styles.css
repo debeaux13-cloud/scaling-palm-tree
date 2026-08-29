@@ -6,3 +6,5 @@
 .order-panel{margin-top:22px;padding:18px;border:1px solid #d8b862;background:#fffcf5}.order-panel p{text-transform:capitalize}.preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}.preview-grid video{width:100%;background:#09091d}@media(max-width:760px){.preview-grid{grid-template-columns:1fr}}
 
 .preview-player{margin:14px 0;background:#09091d;padding:10px}.preview-player video{display:block;width:100%;max-height:430px;background:#000}.preview-player p{margin:8px 0 0;color:#fff;font-size:12px}.preview-progress{height:5px;background:#ffffff33;margin-top:10px;overflow:hidden}.preview-progress span{display:block;height:100%;background:var(--gold);transition:width .15s linear}
+
+.preview-error{margin:12px 0;padding:10px;border:1px solid #a62b2b;background:#fff1f1;color:#7c1f1f;font-size:13px}.order-panel>button{margin:0 0 12px}
