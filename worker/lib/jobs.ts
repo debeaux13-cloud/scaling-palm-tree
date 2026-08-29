@@ -9,6 +9,7 @@ export type StudioJob = {
   operation?: unknown;
   outputPathname?: string;
   error?: string;
+  purchase?: { status: 'not-started' | 'checkout-created' | 'paid'; checkoutSessionId?: string; paidAt?: string; resumeFromScene?: number };
 };
 
 const pathFor = (id: string) => `studio/jobs/${id}`;
