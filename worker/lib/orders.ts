@@ -1,5 +1,11 @@
 import { get, list, put } from '@vercel/blob';
 
+export const PRODUCT_TIERS = {
+  three: { id: 'three', label: '3-Minute Movie Package', priceCents: 4900, targetRuntimeSeconds: 180, sceneCount: 18, storybookPages: 18 },
+  five: { id: 'five', label: '5-Minute Movie Package', priceCents: 7900, targetRuntimeSeconds: 300, sceneCount: 30, storybookPages: 30 },
+} as const;
+
+export type ProductTier = keyof typeof PRODUCT_TIERS;
 export type Scene = {
   number: number;
   narration: string;
@@ -11,21 +17,29 @@ export type Scene = {
   error?: string;
 };
 
+export type Storybook = { pageCount: number; status: 'locked' | 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
 export type MovieOrder = {
   id: string;
   ownerId: string;
   title: string;
+  tier: ProductTier;
+  targetRuntimeSeconds: number;
+  moods: string[];
   subjectPhotoPathnames: string[];
   createdAt: string;
   status: 'preview-ready' | 'preview-in-progress' | 'awaiting-payment' | 'ready-for-fulfillment' | 'fulfillment-in-progress' | 'complete' | 'failed';
   scenes: Scene[];
   purchase: { status: 'not-started' | 'checkout-created' | 'paid'; checkoutSessionId?: string; paidAt?: string; resumeFromScene?: number };
-  previewStorybook?: { pageCount: 6; status: 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
-  finalStorybook?: { pageCount: 18; status: 'locked' | 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
+  previewStorybook?: Storybook;
+  finalStorybook?: Storybook;
   finalMoviePathname?: string;
 };
 
 const pathFor = (id: string) => `studio/orders/${id}`;
+export function isProductTier(value: unknown): value is ProductTier { return typeof value === 'string' && value in PRODUCT_TIERS; }
+export function previewSceneCount() { return 6; }
+export function tierFor(order: Pick<MovieOrder, 'tier'>) { return PRODUCT_TIERS[order.tier] ?? PRODUCT_TIERS.three; }
+export function hasRequiredDeliverables(order: MovieOrder) { return Boolean(order.finalMoviePathname && order.finalStorybook?.status === 'ready' && order.finalStorybook.pathname); }
 
 export async function writeOrder(order: MovieOrder) {
   await put(`${pathFor(order.id)}/latest.json`, JSON.stringify(order), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
@@ -47,12 +61,10 @@ export async function listOrders(ownerId: string): Promise<MovieOrder[]> {
   return orders.filter((order): order is MovieOrder => Boolean(order?.ownerId === ownerId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function canRenderScene(order: MovieOrder, scene: Scene) {
-  return scene.number <= 6 || order.purchase.status === 'paid';
-}
-
+export function canRenderScene(order: MovieOrder, scene: Scene) { return scene.number <= previewSceneCount() || order.purchase.status === 'paid'; }
 export function orderProgress(order: MovieOrder) {
-  const previewDone = order.scenes.filter((scene) => scene.number <= 6 && scene.status === 'completed').length;
+  const previewTotal = Math.min(previewSceneCount(), order.scenes.length);
+  const previewDone = order.scenes.filter((scene) => scene.number <= previewTotal && scene.status === 'completed').length;
   const finalDone = order.scenes.filter((scene) => scene.status === 'completed').length;
-  return { previewDone, previewTotal: 6, finalDone, finalTotal: 18 };
+  return { previewDone, previewTotal, finalDone, finalTotal: order.scenes.length };
 }

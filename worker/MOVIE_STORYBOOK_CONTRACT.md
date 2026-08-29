@@ -6,8 +6,7 @@ Each customer order owns exactly 18 scene records. Each record keeps the scene n
 
 - Scenes 1–6 are available before purchase.
 - The preview is a 60-second movie assembled from six 10-second scene clips.
-- The preview Storybook has six pages.
-- Every page must use the exact artwork rendered for that scene and the exact narration spoken in that scene.
+- The paid Storybook is generated only after every final scene has its exact rendered artwork and narration asset.
 
 ## Paid fulfillment
 
