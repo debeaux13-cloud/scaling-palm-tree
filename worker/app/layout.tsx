@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './styles.css';
 
 export const metadata: Metadata = {
-  title: 'MCS Studio Lab',
-  description: 'A private workspace for story, sound, and motion production.',
+  title: 'Main Characters Studios by Tiffani',
+  description: 'Personalized AI movies and matching storybooks made from your people, pets, memories, and ideas.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
