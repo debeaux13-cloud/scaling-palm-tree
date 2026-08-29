@@ -10,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!order) return NextResponse.json({ error: 'order not found' }, { status: 404 });
   return NextResponse.json({
     preview: { pages: 6, usesExactSceneArtwork: true, usesExactSceneNarration: true, customerFacingSceneLabels: false, status: order.previewStorybook?.status },
-    final: { pages: 18, usesExactSceneArtwork: true, usesExactSceneNarration: true, customerFacingSceneLabels: false, status: order.finalStorybook?.status },
+    final: { pages: 30, usesExactSceneArtwork: true, usesExactSceneNarration: true, customerFacingSceneLabels: false, status: order.finalStorybook?.status },
     note: 'PDF generation is intentionally blocked until each required scene has its exact rendered artwork and narration assets.',
   });
 }

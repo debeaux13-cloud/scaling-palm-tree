@@ -19,7 +19,7 @@ export type MovieOrder = {
   scenes: Scene[];
   purchase: { status: 'not-started' | 'checkout-created' | 'paid'; checkoutSessionId?: string; paidAt?: string; resumeFromScene?: number };
   previewStorybook?: { pageCount: 6; status: 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
-  finalStorybook?: { pageCount: 18; status: 'locked' | 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
+  finalStorybook?: { pageCount: 30; status: 'locked' | 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
   finalMoviePathname?: string;
 };
 
@@ -52,5 +52,5 @@ export function canRenderScene(order: MovieOrder, scene: Scene) {
 export function orderProgress(order: MovieOrder) {
   const previewDone = order.scenes.filter((scene) => scene.number <= 6 && scene.status === 'completed').length;
   const finalDone = order.scenes.filter((scene) => scene.status === 'completed').length;
-  return { previewDone, previewTotal: 6, finalDone, finalTotal: 18 };
+  return { previewDone, previewTotal: 6, finalDone, finalTotal: 30 };
 }
