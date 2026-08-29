@@ -6,65 +6,24 @@ export const PRODUCT_TIERS = {
 } as const;
 
 export type ProductTier = keyof typeof PRODUCT_TIERS;
-export type Scene = {
-  number: number;
-  narration: string;
-  videoPrompt: string;
-  artworkPathname?: string;
-  videoPathname?: string;
-  status: 'locked' | 'ready' | 'submitted' | 'completed' | 'failed';
-  operation?: unknown;
-  error?: string;
-};
-
+export type Scene = { number: number; narration: string; videoPrompt: string; artworkPathname?: string; videoPathname?: string; status: 'locked' | 'ready' | 'submitted' | 'completed' | 'failed'; operation?: unknown; error?: string };
 export type Storybook = { pageCount: number; status: 'locked' | 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
 export type MovieOrder = {
-  id: string;
-  ownerId: string;
-  title: string;
-  tier: ProductTier;
-  targetRuntimeSeconds: number;
-  moods: string[];
-  subjectPhotoPathnames: string[];
-  createdAt: string;
+  id: string; ownerId: string; title: string; storyDirection: string; moods: string[]; subjectPhotoPathnames: string[]; createdAt: string;
+  tier?: ProductTier; targetRuntimeSeconds?: number;
   status: 'preview-ready' | 'preview-in-progress' | 'awaiting-payment' | 'ready-for-fulfillment' | 'fulfillment-in-progress' | 'complete' | 'failed';
+  continuationStatus: 'not-selected' | 'awaiting-payment' | 'ready' | 'planning' | 'planned' | 'failed';
   scenes: Scene[];
   purchase: { status: 'not-started' | 'checkout-created' | 'paid'; checkoutSessionId?: string; paidAt?: string; resumeFromScene?: number };
-  previewStorybook?: Storybook;
-  finalStorybook?: Storybook;
-  finalMoviePathname?: string;
+  previewStorybook?: Storybook; finalStorybook?: Storybook; finalMoviePathname?: string;
 };
-
 const pathFor = (id: string) => `studio/orders/${id}`;
 export function isProductTier(value: unknown): value is ProductTier { return typeof value === 'string' && value in PRODUCT_TIERS; }
 export function previewSceneCount() { return 6; }
-export function tierFor(order: Pick<MovieOrder, 'tier'>) { return PRODUCT_TIERS[order.tier] ?? PRODUCT_TIERS.three; }
+export function tierFor(order: Pick<MovieOrder, 'tier'>) { return order.tier ? PRODUCT_TIERS[order.tier] : undefined; }
 export function hasRequiredDeliverables(order: MovieOrder) { return Boolean(order.finalMoviePathname && order.finalStorybook?.status === 'ready' && order.finalStorybook.pathname); }
-
-export async function writeOrder(order: MovieOrder) {
-  await put(`${pathFor(order.id)}/latest.json`, JSON.stringify(order), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
-}
-
-export async function readOrder(id: string): Promise<MovieOrder | null> {
-  try {
-    const { stream } = await get(`${pathFor(id)}/latest.json`, { access: 'private' });
-    return JSON.parse(await new Response(stream).text()) as MovieOrder;
-  } catch { return null; }
-}
-
-export async function listOrders(ownerId: string): Promise<MovieOrder[]> {
-  const { blobs } = await list({ prefix: 'studio/orders/', limit: 100 });
-  const orders = await Promise.all(blobs.filter((blob) => blob.pathname.endsWith('/latest.json')).map(async (blob) => {
-    try { const { stream } = await get(blob.pathname, { access: 'private' }); return JSON.parse(await new Response(stream).text()) as MovieOrder; }
-    catch { return null; }
-  }));
-  return orders.filter((order): order is MovieOrder => Boolean(order?.ownerId === ownerId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
+export async function writeOrder(order: MovieOrder) { await put(`${pathFor(order.id)}/latest.json`, JSON.stringify(order), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true }); }
+export async function readOrder(id: string): Promise<MovieOrder | null> { try { const { stream } = await get(`${pathFor(id)}/latest.json`, { access: 'private' }); return JSON.parse(await new Response(stream).text()) as MovieOrder; } catch { return null; } }
+export async function listOrders(ownerId: string): Promise<MovieOrder[]> { const { blobs } = await list({ prefix: 'studio/orders/', limit: 100 }); const orders = await Promise.all(blobs.filter((blob) => blob.pathname.endsWith('/latest.json')).map(async (blob) => { try { const { stream } = await get(blob.pathname, { access: 'private' }); return JSON.parse(await new Response(stream).text()) as MovieOrder; } catch { return null; } })); return orders.filter((order): order is MovieOrder => Boolean(order?.ownerId === ownerId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
 export function canRenderScene(order: MovieOrder, scene: Scene) { return scene.number <= previewSceneCount() || order.purchase.status === 'paid'; }
-export function orderProgress(order: MovieOrder) {
-  const previewTotal = Math.min(previewSceneCount(), order.scenes.length);
-  const previewDone = order.scenes.filter((scene) => scene.number <= previewTotal && scene.status === 'completed').length;
-  const finalDone = order.scenes.filter((scene) => scene.status === 'completed').length;
-  return { previewDone, previewTotal, finalDone, finalTotal: order.scenes.length };
-}
+export function orderProgress(order: MovieOrder) { const previewTotal = Math.min(previewSceneCount(), order.scenes.length); const previewDone = order.scenes.filter((scene) => scene.number <= previewTotal && scene.status === 'completed').length; const finalDone = order.scenes.filter((scene) => scene.status === 'completed').length; return { previewDone, previewTotal, finalDone, finalTotal: order.tier ? PRODUCT_TIERS[order.tier].sceneCount : previewTotal }; }
