@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { requireCustomer } from '../../../../lib/auth';
+import { getOwner } from '../../../../lib/owner';
 import { orderProgress, readOrder } from '../../../../lib/orders';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { userId, response } = await requireCustomer();
-  if (response || !userId) return response!;
+  const { ownerId } = await getOwner();
   const { id } = await params;
   const order = await readOrder(id);
-  if (!order || order.customerId !== userId) return NextResponse.json({ error: 'order not found' }, { status: 404 });
+  if (!order || order.ownerId !== ownerId) return NextResponse.json({ error: 'order not found' }, { status: 404 });
   return NextResponse.json({ order, progress: orderProgress(order) });
 }
