@@ -9,8 +9,6 @@ const model = 'bytedance/seedance-v1.5-pro';
 export async function POST(request: Request) {
   const denied = requireStudioAccess(request);
   if (denied) return denied;
-  if (!process.env.AI_GATEWAY_API_KEY) return NextResponse.json({ error: 'AI Gateway is not connected yet' }, { status: 503 });
-
   const { prompt, aspectRatio = '16:9', resolution = '720p', duration = 5 } = await request.json();
   if (typeof prompt !== 'string' || !prompt.trim()) return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
   if (!['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].includes(aspectRatio) || !['720p', '1080p'].includes(resolution) || ![5, 10].includes(duration)) {

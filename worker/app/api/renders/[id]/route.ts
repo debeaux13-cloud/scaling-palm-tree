@@ -1,4 +1,5 @@
 import { experimental_getVideoStatus as getVideoStatus } from 'ai';
+import { Buffer } from 'node:buffer';
 import { NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
 import { requireStudioAccess } from '../../../../lib/auth';
@@ -19,15 +20,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (result.status === 'completed' && result.videos[0]) {
       const video = result.videos[0];
       const pathname = `studio/renders/${id}.mp4`;
-      let bytes: Uint8Array;
+      let content: Buffer;
       if (video.type === 'url') {
         const response = await fetch(video.url);
         if (!response.ok) throw new Error(`Video download failed with ${response.status}`);
-        bytes = new Uint8Array(await response.arrayBuffer());
+        content = Buffer.from(await response.arrayBuffer());
+      } else if (video.type === 'base64') {
+        content = Buffer.from(video.data, 'base64');
       } else {
-        bytes = video.uint8Array;
+        content = Buffer.from(video.data);
       }
-      await put(pathname, bytes, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
+      await put(pathname, content, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
       const completed = { ...job, status: 'completed' as const, outputPathname: pathname };
       await writeCurrentJob(completed);
       return NextResponse.json({ job: completed });
