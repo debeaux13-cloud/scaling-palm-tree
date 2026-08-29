@@ -1,13 +1,12 @@
 import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
-import { requireCustomer } from '../../../../lib/auth';
+import { getOwner } from '../../../../lib/owner';
 
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export async function POST(request: Request) {
-  const { userId, response } = await requireCustomer();
-  if (response || !userId) return response!;
+  const { ownerId } = await getOwner();
 
   const form = await request.formData();
   const file = form.get('photo');
@@ -19,7 +18,7 @@ export async function POST(request: Request) {
   }
 
   const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-  const pathname = `studio/customers/${userId}/references/${crypto.randomUUID()}.${extension}`;
+  const pathname = `studio/owners/${ownerId}/references/${crypto.randomUUID()}.${extension}`;
   await put(pathname, file, { access: 'private', contentType: file.type, addRandomSuffix: false });
   return NextResponse.json({ pathname, name: file.name, type: file.type }, { status: 201 });
 }

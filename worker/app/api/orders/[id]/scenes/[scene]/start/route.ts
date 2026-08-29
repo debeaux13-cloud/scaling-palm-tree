@@ -1,17 +1,16 @@
 import { experimental_startVideo as startVideo } from 'ai';
 import { NextResponse } from 'next/server';
-import { requireCustomer } from '../../../../../../../lib/auth';
+import { getOwner } from '../../../../../../../lib/owner';
 import { canRenderScene, readOrder, writeOrder } from '../../../../../../../lib/orders';
 
 const model = 'bytedance/seedance-v1.5-pro';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; scene: string }> }) {
-  const { userId, response } = await requireCustomer();
-  if (response || !userId) return response!;
+  const { ownerId } = await getOwner();
   const { id, scene: sceneParam } = await params;
   const sceneNumber = Number(sceneParam);
   const order = await readOrder(id);
-  if (!order || order.customerId !== userId || !Number.isInteger(sceneNumber) || sceneNumber < 1 || sceneNumber > 18) return NextResponse.json({ error: 'order or scene not found' }, { status: 404 });
+  if (!order || order.ownerId !== ownerId || !Number.isInteger(sceneNumber) || sceneNumber < 1 || sceneNumber > 18) return NextResponse.json({ error: 'order or scene not found' }, { status: 404 });
   const scene = order.scenes[sceneNumber - 1];
   if (!canRenderScene(order, scene)) return NextResponse.json({ error: 'Scenes 7–18 are locked until verified payment.' }, { status: 402 });
   if (scene.status === 'submitted' || scene.status === 'completed') return NextResponse.json({ error: 'scene is already in progress or complete' }, { status: 409 });

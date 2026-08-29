@@ -1,18 +1,14 @@
-import { generateText } from 'ai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
 import { NextResponse } from 'next/server';
-import { requireCustomer } from '../../../lib/auth';
+import { getOwner } from '../../../lib/owner';
 
+const storySchema = z.object({ title: z.string(), scenes: z.array(z.object({ narration: z.string(), videoPrompt: z.string() })).length(18) });
 export async function POST(request: Request) {
-  const { response } = await requireCustomer();
-  if (response) return response;
-
-  const { premise, audience = 'families', durationSeconds = 60 } = await request.json();
-  if (typeof premise !== 'string' || !premise.trim()) {
-    return NextResponse.json({ error: 'premise is required' }, { status: 400 });
-  }
-  const { text } = await generateText({
-    model: 'openai/gpt-5.4',
-    prompt: `Create a ${durationSeconds}-second animated story for ${audience}. Premise: ${premise}. Return: title, character notes, narration, dialogue, and a shot-by-shot movement prompt for a video-generation provider.`,
-  });
-  return NextResponse.json({ story: text });
+  const { ownerId } = await getOwner();
+  const { premise, subjectPhotoPathnames = [] } = await request.json();
+  if (typeof premise !== 'string' || !premise.trim() || !Array.isArray(subjectPhotoPathnames)) return NextResponse.json({ error: 'A story idea and photo references are required.' }, { status: 400 });
+  if (subjectPhotoPathnames.some((pathname: unknown) => typeof pathname !== 'string' || !pathname.startsWith(`studio/owners/${ownerId}/references/`))) return NextResponse.json({ error: 'Photo references must belong to this preview.' }, { status: 403 });
+  const { object } = await generateObject({ model: 'openai/gpt-5.4', schema: storySchema, prompt: `Write one cohesive personalized family movie in exactly 18 connected scenes of about 10 seconds. First six scenes make the free 60-second preview; Scenes 7–18 continue the same story through climax and ending. Keep the uploaded subject recognizably consistent. Premise: ${premise}. Each scene needs exact narration and a video prompt with visible character movement and sound. Do not put Scene labels in narration.` });
+  return NextResponse.json({ story: object });
 }

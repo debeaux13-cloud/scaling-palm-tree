@@ -13,7 +13,7 @@ export type Scene = {
 
 export type MovieOrder = {
   id: string;
-  customerId: string;
+  ownerId: string;
   title: string;
   subjectPhotoPathnames: string[];
   createdAt: string;
@@ -38,13 +38,13 @@ export async function readOrder(id: string): Promise<MovieOrder | null> {
   } catch { return null; }
 }
 
-export async function listOrders(customerId: string): Promise<MovieOrder[]> {
+export async function listOrders(ownerId: string): Promise<MovieOrder[]> {
   const { blobs } = await list({ prefix: 'studio/orders/', limit: 100 });
   const orders = await Promise.all(blobs.filter((blob) => blob.pathname.endsWith('/latest.json')).map(async (blob) => {
     try { const { stream } = await get(blob.pathname, { access: 'private' }); return JSON.parse(await new Response(stream).text()) as MovieOrder; }
     catch { return null; }
   }));
-  return orders.filter((order): order is MovieOrder => Boolean(order?.customerId === customerId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return orders.filter((order): order is MovieOrder => Boolean(order?.ownerId === ownerId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function canRenderScene(order: MovieOrder, scene: Scene) {
