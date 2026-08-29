@@ -8,10 +8,11 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@vercel/blob": "latest",
-    "@clerk/nextjs": "latest",
-    "ai": "latest",
     "@ai-sdk/gateway": "latest",
+    "@clerk/nextjs": "latest",
+    "@vercel/blob": "latest",
+    "@vercel/speed-insights": "^2.0.0",
+    "ai": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
