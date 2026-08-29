@@ -1,4 +1,4 @@
-import { get, put } from '@vercel/blob';
+import { get, list, put } from '@vercel/blob';
 
 export type StudioJob = {
   id: string;
@@ -31,4 +31,18 @@ export async function writeCurrentJob(job: StudioJob) {
     access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true,
   });
   await appendJobEvent(job);
+}
+
+export async function listCompletedJobs(): Promise<StudioJob[]> {
+  const { blobs } = await list({ prefix: 'studio/jobs/', limit: 100 });
+  const latest = blobs.filter((blob) => blob.pathname.endsWith('/latest.json'));
+  const jobs = await Promise.all(latest.map(async (blob) => {
+    try {
+      const { stream } = await get(blob.pathname, { access: 'private' });
+      return JSON.parse(await new Response(stream).text()) as StudioJob;
+    } catch { return null; }
+  }));
+  return jobs
+    .filter((job): job is StudioJob => Boolean(job?.outputPathname && job.status === 'completed'))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
