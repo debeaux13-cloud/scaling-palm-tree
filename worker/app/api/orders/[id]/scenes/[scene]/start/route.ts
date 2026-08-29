@@ -14,8 +14,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const scene = order.scenes[sceneNumber - 1];
   if (!canRenderScene(order, scene)) return NextResponse.json({ error: 'Scenes after the preview are locked until verified payment.' }, { status: 402 });
   if (scene.status === 'submitted' || scene.status === 'completed') return NextResponse.json({ error: 'scene is already in progress or complete' }, { status: 409 });
-  const { operation } = await startVideo({ model, prompt: scene.videoPrompt, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true });
-  scene.status = 'submitted'; scene.operation = operation; order.status = sceneNumber <= 6 ? 'preview-in-progress' : 'fulfillment-in-progress';
-  await writeOrder(order);
-  return NextResponse.json({ orderId: order.id, scene: sceneNumber, status: scene.status }, { status: 202 });
+  try {
+    const { operation } = await startVideo({ model, prompt: scene.videoPrompt, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true });
+    scene.status = 'submitted'; scene.operation = operation; order.status = sceneNumber <= 6 ? 'preview-in-progress' : 'fulfillment-in-progress';
+    await writeOrder(order);
+    return NextResponse.json({ orderId: order.id, scene: sceneNumber, status: scene.status }, { status: 202 });
+  } catch (error) {
+    scene.status = 'failed'; scene.error = error instanceof Error ? error.message : 'Video generation request failed'; order.status = 'failed';
+    await writeOrder(order);
+    return NextResponse.json({ error: scene.error }, { status: 502 });
+  }
 }
