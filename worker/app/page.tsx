@@ -1,17 +1,16 @@
 import { Creator } from './creator';
 
-const demoUrl = 'https://worker-c8pjmcclt-yh6w2h5n8y-9569s-projects.vercel.app';
-
 export default function Home() {
   return <main>
-    <nav className="nav"><a className="brand" href="#top">Main Characters<br /><em>Studios by Tiffani</em></a><div><a href="#how-it-works">How it works</a><a href="#create">Create a story</a></div></nav>
-    <section className="hero" id="top">
-      <div className="hero-copy"><p className="eyebrow">Your child is the star</p><h1>Stories made<br /><i>for their</i> imagination.</h1><p className="hero-text">A personalized movie and matching Storybook created around the little character you love most.</p><div className="hero-actions"><a className="button primary" href="#create">Create a free preview</a><a className="button ghost" href={demoUrl}>Try the demo</a></div><p className="fine-print">Your preview includes a 60-second movie and a six-page Storybook.</p></div>
-      <div className="hero-art" aria-label="Magical storybook illustration"><div className="moon"/><div className="spark spark-one"/><div className="spark spark-two"/><div className="star-character"><span className="hair"/><span className="face"/><span className="body"/><span className="book">✦</span></div><p>Every child deserves<br />to see themselves shine.</p></div>
+    <nav className="nav"><a className="wordmark" href="#top"><span>Main Character</span><strong>Studios</strong><em>by Tiffani</em></a><div><a href="#how-it-works">How it works</a><a href="#create">Create a movie</a></div></nav>
+    <section className="hero cosmic" id="top">
+      <div className="film-ring ring-one"/><div className="film-ring ring-two"/><div className="star star-a">✦</div><div className="star star-b">✦</div><div className="star star-c">✦</div>
+      <div className="hero-copy"><p className="eyebrow gold">Every child is the main character</p><h1>See their<br/><i>story</i> light up.</h1><p className="hero-text">Personalized animated movies and matching Storybooks starring the child, pet, or loved one at the heart of your world.</p><div className="hero-actions"><a className="button primary" href="#create">Create a free preview</a><a className="button ghost" href="#how-it-works">Discover the magic</a></div><p className="fine-print">A 60-second movie preview and matching six-page Storybook, made from one story.</p></div>
+      <div className="hero-figures" aria-label="A child and animal companions under a starry sky"><div className="glow"/><div className="figure parent"/><div className="figure child"/><div className="figure dog"/><div className="figure cat"/></div>
     </section>
-    <section className="journey" id="how-it-works"><p className="eyebrow">A little magic in three steps</p><div className="steps"><article><b>01</b><h2>Tell us their world</h2><p>Share a story idea, their personality, and the kind of adventure they would love.</p></article><article><b>02</b><h2>Watch the preview</h2><p>Enjoy the first six scenes of their one-of-a-kind movie and matching Storybook.</p></article><article><b>03</b><h2>Keep the whole story</h2><p>Unlock the full movie and a beautiful Storybook made from the very same scenes.</p></article></div></section>
-    <section className="keepsake"><div><p className="eyebrow">More than a movie</p><h2>A keepsake they<br /><i>will come back to.</i></h2></div><p>Your finished order includes a personalized movie and a matching Storybook PDF. Every page belongs to a moment from their story.</p></section>
-    <section className="studio" id="create"><div className="studio-intro"><p className="eyebrow">The story studio</p><h2>Start their<br />next adventure.</h2><p>Make a free story preview. The creator is private so your ideas and finished videos stay protected.</p></div><Creator /></section>
-    <footer><span>Main Characters Studios by Tiffani</span><span>Made for big imaginations.</span></footer>
+    <section className="journey" id="how-it-works"><p className="eyebrow">Your family&apos;s story, on screen</p><h2 className="section-title">A little bit of magic.<br/><i>A lifetime of memories.</i></h2><div className="steps"><article><b>01</b><h3>Share their spark</h3><p>Upload photos and tell us about the person or pet who will star in this adventure.</p></article><article><b>02</b><h3>Meet the movie</h3><p>Watch the first minute of a connected, personalized story made just for them.</p></article><article><b>03</b><h3>Keep the magic</h3><p>Unlock their full animated movie and the matching Storybook to treasure forever.</p></article></div></section>
+    <section className="keepsake"><div className="keepsake-orbit">✦</div><div><p className="eyebrow gold">The complete keepsake</p><h2>One story.<br/><i>Two ways to remember.</i></h2></div><p>Your finished order includes a personalized movie and a matching Storybook PDF. Each page is a moment from the exact same story.</p></section>
+    <section className="studio cosmic" id="create"><div className="studio-intro"><p className="eyebrow gold">The story studio</p><h2>Start their<br/><i>adventure.</i></h2><p>Create the beginning of a story they will love seeing themselves in.</p></div><Creator /></section>
+    <footer><a className="wordmark" href="#top"><span>Main Character</span><strong>Studios</strong><em>by Tiffani</em></a><span>Stories written in starlight.</span></footer>
   </main>;
 }
