@@ -15,6 +15,7 @@ export type MovieOrder = {
   id: string;
   customerId: string;
   title: string;
+  subjectPhotoPathnames: string[];
   createdAt: string;
   status: 'preview-ready' | 'preview-in-progress' | 'awaiting-payment' | 'ready-for-fulfillment' | 'fulfillment-in-progress' | 'complete' | 'failed';
   scenes: Scene[];
