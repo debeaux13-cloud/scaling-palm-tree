@@ -2,6 +2,7 @@ import { get, list, put } from '@vercel/blob';
 
 export type StudioJob = {
   id: string;
+  customerId: string;
   type: 'video';
   status: 'queued' | 'submitted' | 'completed' | 'failed';
   prompt: string;
@@ -34,7 +35,7 @@ export async function writeCurrentJob(job: StudioJob) {
   await appendJobEvent(job);
 }
 
-export async function listCompletedJobs(): Promise<StudioJob[]> {
+export async function listCompletedJobs(customerId: string): Promise<StudioJob[]> {
   const { blobs } = await list({ prefix: 'studio/jobs/', limit: 100 });
   const latest = blobs.filter((blob) => blob.pathname.endsWith('/latest.json'));
   const jobs = await Promise.all(latest.map(async (blob) => {
@@ -44,6 +45,6 @@ export async function listCompletedJobs(): Promise<StudioJob[]> {
     } catch { return null; }
   }));
   return jobs
-    .filter((job): job is StudioJob => Boolean(job?.outputPathname && job.status === 'completed'))
+    .filter((job): job is StudioJob => Boolean(job?.customerId === customerId && job.outputPathname && job.status === 'completed'))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

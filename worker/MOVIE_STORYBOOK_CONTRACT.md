@@ -1,6 +1,6 @@
 # Movie + matching Storybook contract
 
-Each customer order owns exactly 30 scene records. Each record keeps the scene number only as an internal identifier, the exact narration spoken in the movie scene, the exact video prompt, and paths for the rendered scene artwork and scene MP4.
+Each customer order owns exactly 18 scene records. Each record keeps the scene number only as an internal identifier, the exact narration spoken in the movie scene, the exact video prompt, and paths for the rendered scene artwork and scene MP4.
 
 ## Preview
 
@@ -12,8 +12,8 @@ Each customer order owns exactly 30 scene records. Each record keeps the scene n
 ## Paid fulfillment
 
 - Stripe confirms one $49 payment for the movie and matching Storybook as a single product.
-- The webhook unlocks Scenes 7–30 on the same order. It never recreates Scenes 1–6.
-- The final product is an 30-scene movie and one 30-page Storybook PDF.
+- The webhook unlocks Scenes 7–18 on the same order. It never recreates Scenes 1–6.
+- The final product is an 18-scene movie and one 18-page Storybook PDF.
 - Customer-facing pages never show internal labels such as `Scene 1`.
 
 ## Fulfillment gate

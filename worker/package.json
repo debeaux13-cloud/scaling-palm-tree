@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@vercel/blob": "latest",
+    "@clerk/nextjs": "latest",
     "ai": "latest",
     "@ai-sdk/gateway": "latest",
     "next": "latest",
