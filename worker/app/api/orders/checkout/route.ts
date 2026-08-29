@@ -21,8 +21,8 @@ export async function POST(request: Request) {
     mode: 'payment',
     success_url: `${origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/?checkout=cancelled`,
-    line_items: [{ price_data: { currency: 'usd', unit_amount: 4900, product_data: { name: 'Personalized Movie + Matching Storybook PDF', description: 'One personalized 18-scene movie and matching 18-page Storybook PDF. Your free preview covers Scenes 1–6.' } }, quantity: 1 }],
-    metadata: { orderId, product: 'personalized-movie-and-matching-storybook', previewScenes: '1-6', resumeFromScene: '7', finalScenes: '1-18', finalStorybookPages: '18' },
+    line_items: [{ price_data: { currency: 'usd', unit_amount: 4900, product_data: { name: 'Personalized Movie + Matching Storybook PDF', description: 'One personalized 30-scene movie and matching 30-page Storybook PDF. Your free preview covers Scenes 1–6.' } }, quantity: 1 }],
+    metadata: { orderId, product: 'personalized-movie-and-matching-storybook', previewScenes: '1-6', resumeFromScene: '7', finalScenes: '1-30', finalStorybookPages: '30' },
   });
   await writeOrder({ ...order, purchase: { status: 'checkout-created', checkoutSessionId: session.id, resumeFromScene: 7 } });
   return NextResponse.json({ checkoutUrl: session.url });

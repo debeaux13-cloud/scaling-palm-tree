@@ -13,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id, scene: sceneParam } = await params;
   const sceneNumber = Number(sceneParam);
   const order = await readOrder(id);
-  if (!order || !Number.isInteger(sceneNumber) || sceneNumber < 1 || sceneNumber > 18) return NextResponse.json({ error: 'order or scene not found' }, { status: 404 });
+  if (!order || !Number.isInteger(sceneNumber) || sceneNumber < 1 || sceneNumber > 30) return NextResponse.json({ error: 'order or scene not found' }, { status: 404 });
   const scene = order.scenes[sceneNumber - 1];
   if (scene.status !== 'submitted' || !scene.operation) return NextResponse.json({ scene, progress: orderProgress(order) });
   try {
@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       scene.status = 'completed'; delete scene.operation;
       const progress = orderProgress(order);
       if (progress.previewDone === 6 && order.purchase.status !== 'paid') order.status = 'awaiting-payment';
-      if (progress.finalDone === 18) order.status = 'complete';
+      if (progress.finalDone === 30) order.status = 'complete';
       await writeOrder(order);
       return NextResponse.json({ scene, progress });
     }
