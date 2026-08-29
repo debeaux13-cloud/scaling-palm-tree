@@ -15,6 +15,7 @@ async function studioFetch(path: string, body?: unknown) {
 export function Creator() {
   const { isLoaded, isSignedIn } = useAuth();
   const [premise, setPremise] = useState('');
+  const [photos, setPhotos] = useState<Array<{ pathname: string; name: string }>>([]);
   const [story, setStory] = useState('');
   const [format, setFormat] = useState('16:9');
   const [duration, setDuration] = useState(5);
@@ -43,6 +44,25 @@ export function Creator() {
   }, [job?.id, job?.status, isSignedIn]);
   useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
 
+  async function uploadPhotos(files: FileList | null) {
+    if (!files?.length) return;
+    const remaining = 5 - photos.length;
+    if (remaining <= 0) { setMessage('You can add up to five reference photos per story.'); return; }
+    const selected = Array.from(files).slice(0, remaining);
+    setMessage('Saving your reference photo…');
+    try {
+      const uploaded = await Promise.all(selected.map(async (file) => {
+        const form = new FormData(); form.set('photo', file);
+        const response = await fetch('/api/uploads/photo', { method: 'POST', body: form });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Photo upload failed.');
+        return { pathname: data.pathname as string, name: data.name as string };
+      }));
+      setPhotos((current) => [...current, ...uploaded]);
+      setMessage(`${uploaded.length} reference photo${uploaded.length === 1 ? '' : 's'} saved privately.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Photo upload failed.'); }
+  }
+
   async function createStory(event: FormEvent) {
     event.preventDefault(); setMessage('Writing your story…');
     try { const data = await studioFetch('/api/story', { premise }); setStory(data.story); setMessage('Story ready. Edit it below, then create a video prompt.'); }
@@ -67,6 +87,7 @@ export function Creator() {
 
   return <section className="creator">
     <div className="creator-header"><div><p className="eyebrow">Your private studio</p><h2>Make a scene</h2></div>{isLoaded && (isSignedIn ? <UserButton /> : <SignInButton mode="modal"><button type="button">Sign in to start</button></SignInButton>)}</div>
+    <div className="photo-upload"><label>Who will star in the movie?<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={!isSignedIn} onChange={(event) => void uploadPhotos(event.target.files)} /></label><p>Upload 1–5 clear JPG, PNG, or WebP photos. They stay private and are saved with your story as its character reference.</p>{photos.length > 0 && <ul>{photos.map((photo) => <li key={photo.pathname}>{photo.name}</li>)}</ul>}</div>
     <form onSubmit={createStory}><label>Story idea<textarea value={premise} onChange={(e) => setPremise(e.target.value)} placeholder="A young heroine discovers a glowing doorway beneath the city…" required /></label><button type="submit" disabled={!isSignedIn || !premise.trim()}>Generate story</button></form>
     <label>Story & video prompt<textarea value={story} onChange={(e) => setStory(e.target.value)} placeholder="Generate a story first, or write a direct video prompt." /></label>
     <div className="controls"><label>Format<select value={format} onChange={(e) => setFormat(e.target.value)}><option>16:9</option><option>9:16</option><option>1:1</option><option>4:3</option><option>3:4</option><option>21:9</option></select></label><label>Length<select value={duration} onChange={(e) => setDuration(Number(e.target.value))}><option value={5}>5 seconds</option><option value={10}>10 seconds</option></select></label><button type="button" onClick={createRender} disabled={!isSignedIn || !(story || premise)}>Create Seedance video</button></div>
