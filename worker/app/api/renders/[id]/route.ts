@@ -2,17 +2,17 @@ import { experimental_getVideoStatus as getVideoStatus } from 'ai';
 import { Buffer } from 'node:buffer';
 import { NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
-import { requireStudioAccess } from '../../../../lib/auth';
+import { requireCustomer } from '../../../../lib/auth';
 import { readJob, writeCurrentJob } from '../../../../lib/jobs';
 
 const model = 'bytedance/seedance-v1.5-pro';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = requireStudioAccess(request);
-  if (denied) return denied;
+  const { userId, response } = await requireCustomer();
+  if (response || !userId) return response!;
   const { id } = await params;
   const job = await readJob(id);
-  if (!job) return NextResponse.json({ error: 'render job not found' }, { status: 404 });
+  if (!job || job.customerId !== userId) return NextResponse.json({ error: 'render job not found' }, { status: 404 });
   if (job.status !== 'submitted' || !job.operation) return NextResponse.json({ job });
 
   try {

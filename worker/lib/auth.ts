@@ -1,10 +1,8 @@
+import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-export function requireStudioAccess(request: Request) {
-  const secret = process.env.STUDIO_API_SECRET;
-  if (!secret) return NextResponse.json({ error: 'Studio API access is not configured' }, { status: 503 });
-  if (request.headers.get('x-studio-secret') !== secret) {
-    return NextResponse.json({ error: 'Studio API access is not authorized' }, { status: 401 });
-  }
-  return null;
+export async function requireCustomer() {
+  const { userId } = await auth();
+  if (!userId) return { userId: null, response: NextResponse.json({ error: 'Sign in to create or view your movies.' }, { status: 401 }) };
+  return { userId, response: null };
 }

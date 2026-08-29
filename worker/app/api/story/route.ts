@@ -1,10 +1,10 @@
 import { generateText } from 'ai';
 import { NextResponse } from 'next/server';
-import { requireStudioAccess } from '../../../lib/auth';
+import { requireCustomer } from '../../../lib/auth';
 
 export async function POST(request: Request) {
-  const denied = requireStudioAccess(request);
-  if (denied) return denied;
+  const { response } = await requireCustomer();
+  if (response) return response;
 
   const { premise, audience = 'families', durationSeconds = 60 } = await request.json();
   if (typeof premise !== 'string' || !premise.trim()) {
