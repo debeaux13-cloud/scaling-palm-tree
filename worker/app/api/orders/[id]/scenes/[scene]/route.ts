@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { getOwner } from '../../../../../../lib/owner';
 import { hasRequiredDeliverables, orderProgress, readOrder, writeOrder } from '../../../../../../lib/orders';
 
-const model = 'bytedance/seedance-v1.5-pro';
+const model = 'bytedance/seedance-2.5';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string; scene: string }> }) {
   const { ownerId } = await getOwner();
