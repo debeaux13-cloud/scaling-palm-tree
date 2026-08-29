@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { NextResponse } from 'next/server';
-import { readJob, writeCurrentJob } from '../../../../lib/jobs';
+import { readOrder, writeOrder } from '../../../../lib/orders';
 import { getStripe, isStripeTestEnvironment } from '../../../../lib/stripe';
 
 export async function POST(request: Request) {
@@ -15,12 +15,15 @@ export async function POST(request: Request) {
   if (event.type !== 'checkout.session.completed') return NextResponse.json({ received: true });
 
   const session = event.data.object as Stripe.Checkout.Session;
-  const jobId = session.metadata?.jobId;
-  if (!jobId || session.payment_status !== 'paid') return NextResponse.json({ received: true });
-  const job = await readJob(jobId);
-  if (!job) return NextResponse.json({ error: 'Order job not found.' }, { status: 404 });
+  const orderId = session.metadata?.orderId;
+  if (!orderId || session.payment_status !== 'paid') return NextResponse.json({ received: true });
+  const order = await readOrder(orderId);
+  if (!order) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
 
-  await writeCurrentJob({ ...job, purchase: { status: 'paid', checkoutSessionId: session.id, paidAt: new Date().toISOString(), resumeFromScene: 7 } });
-  // Scene 7–18 rendering and the matching 18-page PDF are intentionally not started here until that pipeline is implemented.
+  for (const scene of order.scenes.slice(6)) if (scene.status === 'locked') scene.status = 'ready';
+  order.status = 'ready-for-fulfillment';
+  order.finalStorybook = { pageCount: 18, status: 'blocked-missing-scene-assets' };
+  await writeOrder({ ...order, purchase: { status: 'paid', checkoutSessionId: session.id, paidAt: new Date().toISOString(), resumeFromScene: 7 } });
+  // Payment unlocks only the same order's existing Scenes 7–18. Rendering remains explicit and never regenerates Scenes 1–6.
   return NextResponse.json({ received: true, resumeFromScene: 7 });
 }
