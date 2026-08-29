@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { NextResponse } from 'next/server';
-import { readOrder, writeOrder } from '../../../../lib/orders';
+import { readOrder, tierFor, writeOrder } from '../../../../lib/orders';
 import { getStripe, isStripeTestEnvironment } from '../../../../lib/stripe';
 
 export async function POST(request: Request) {
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   for (const scene of order.scenes.slice(6)) if (scene.status === 'locked') scene.status = 'ready';
   order.status = 'ready-for-fulfillment';
-  order.finalStorybook = { pageCount: 18, status: 'blocked-missing-scene-assets' };
+  order.finalStorybook = { pageCount: tierFor(order).storybookPages, status: 'blocked-missing-scene-assets' };
   await writeOrder({ ...order, purchase: { status: 'paid', checkoutSessionId: session.id, paidAt: new Date().toISOString(), resumeFromScene: 7 } });
   // Payment unlocks only the same order's existing Scenes 7–18. Rendering remains explicit and never regenerates Scenes 1–6.
   return NextResponse.json({ received: true, resumeFromScene: 7 });

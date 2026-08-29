@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getOwner, requireSignedInOwner } from '../../../../lib/owner';
-import { readOrder, writeOrder } from '../../../../lib/orders';
+import { readOrder, tierFor, writeOrder } from '../../../../lib/orders';
 import { getStripe, isStripeTestEnvironment } from '../../../../lib/stripe';
 
 export async function POST(request: Request) {
@@ -13,9 +13,10 @@ export async function POST(request: Request) {
   const order = await readOrder(orderId);
   if (!order || (order.ownerId !== currentOwner && order.ownerId !== signedInOwner)) return NextResponse.json({ error: 'preview order not found' }, { status: 404 });
   if (order.status !== 'awaiting-payment') return NextResponse.json({ error: 'Complete the six-scene preview before checkout.' }, { status: 409 });
+  const product = tierFor(order);
   const stripe = getStripe();
   const origin = new URL(request.url).origin;
-  const session = await stripe.checkout.sessions.create({ mode: 'payment', success_url: `${origin}/?checkout=success`, cancel_url: `${origin}/?checkout=cancelled`, line_items: [{ price_data: { currency: 'usd', unit_amount: 4900, product_data: { name: 'Personalized 3-Minute Movie + Matching Storybook PDF' } }, quantity: 1 }], metadata: { orderId, resumeFromScene: '7', finalScenes: '18', finalStorybookPages: '18' } });
+  const session = await stripe.checkout.sessions.create({ mode: 'payment', success_url: `${origin}/?checkout=success`, cancel_url: `${origin}/?checkout=cancelled`, line_items: [{ price_data: { currency: 'usd', unit_amount: product.priceCents, product_data: { name: `Personalized ${product.label} + Matching Storybook PDF` } }, quantity: 1 }], metadata: { orderId, tier: order.tier, targetRuntimeSeconds: String(product.targetRuntimeSeconds), resumeFromScene: '7', finalScenes: String(product.sceneCount), finalStorybookPages: String(product.storybookPages) } });
   await writeOrder({ ...order, ownerId: signedInOwner, purchase: { status: 'checkout-created', checkoutSessionId: session.id, resumeFromScene: 7 } });
   return NextResponse.json({ checkoutUrl: session.url });
 }
