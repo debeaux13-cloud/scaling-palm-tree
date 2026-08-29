@@ -2,9 +2,15 @@ import { experimental_startVideo as startVideo } from 'ai';
 import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { requireStudioAccess } from '../../../lib/auth';
-import { writeCurrentJob } from '../../../lib/jobs';
+import { listCompletedJobs, writeCurrentJob } from '../../../lib/jobs';
 
 const model = 'bytedance/seedance-v1.5-pro';
+
+export async function GET(request: Request) {
+  const denied = requireStudioAccess(request);
+  if (denied) return denied;
+  return NextResponse.json({ jobs: await listCompletedJobs() });
+}
 
 export async function POST(request: Request) {
   const denied = requireStudioAccess(request);
