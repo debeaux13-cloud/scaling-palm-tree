@@ -10,6 +10,7 @@ export async function POST(request: Request) {
   if (typeof title !== 'string' || !isProductTier(tier) || !Array.isArray(scenes) || !Array.isArray(subjectPhotoPathnames) || !Array.isArray(moods)) return NextResponse.json({ error: 'title, tier, scenes, photo references, and moods are required' }, { status: 400 });
   const product = PRODUCT_TIERS[tier];
   if (scenes.length !== product.sceneCount) return NextResponse.json({ error: `${product.label} requires exactly ${product.sceneCount} scenes.` }, { status: 400 });
+  if (subjectPhotoPathnames.length < 1 || subjectPhotoPathnames.length > 3) return NextResponse.json({ error: 'Upload one to three reference photos.' }, { status: 400 });
   if (subjectPhotoPathnames.some((pathname) => typeof pathname !== 'string' || !pathname.startsWith(`studio/owners/${ownerId}/references/`))) return NextResponse.json({ error: 'Every reference photo must belong to your account.' }, { status: 403 });
   const normalized = scenes.map((scene, index): Scene => ({ number: index + 1, narration: String(scene?.narration ?? '').trim(), videoPrompt: String(scene?.videoPrompt ?? '').trim(), status: index < previewSceneCount() ? 'ready' : 'locked' }));
   if (normalized.some((scene) => !scene.narration || !scene.videoPrompt)) return NextResponse.json({ error: 'Every scene needs exact narration and a video prompt.' }, { status: 400 });
