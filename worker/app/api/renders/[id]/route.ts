@@ -19,12 +19,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (result.status === 'completed' && result.videos[0]) {
       const video = result.videos[0];
       const pathname = `studio/renders/${id}.mp4`;
-      await put(pathname, video.uint8Array, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
+      let bytes: Uint8Array;
+      if (video.type === 'url') {
+        const response = await fetch(video.url);
+        if (!response.ok) throw new Error(`Video download failed with ${response.status}`);
+        bytes = new Uint8Array(await response.arrayBuffer());
+      } else {
+        bytes = video.uint8Array;
+      }
+      await put(pathname, bytes, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
       const completed = { ...job, status: 'completed' as const, outputPathname: pathname };
       await writeCurrentJob(completed);
       return NextResponse.json({ job: completed });
     }
-    if (result.status === 'failed') {
+    if (result.status === 'error') {
       const failed = { ...job, status: 'failed' as const, error: 'AI Gateway video generation failed' };
       await writeCurrentJob(failed);
       return NextResponse.json({ job: failed });
