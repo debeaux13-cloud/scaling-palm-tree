@@ -1,14 +1,15 @@
 import { experimental_startVideo as startVideo } from 'ai';
 import { NextResponse } from 'next/server';
-import { get } from '@vercel/blob';
+import { issueSignedToken, presignUrl } from '@vercel/blob';
 import { getOwner } from '../../../../../../../lib/owner';
 import { canRenderScene, readOrder, writeOrder } from '../../../../../../../lib/orders';
 
 const model = 'bytedance/seedance-2.5';
 
 async function referenceImage(pathname: string) {
-  const { stream, blob } = await get(pathname, { access: 'private' });
-  return { data: new Uint8Array(await new Response(stream).arrayBuffer()), mediaType: blob.contentType || 'image/jpeg' };
+  const token = await issueSignedToken({ pathname, operations: ['get'] });
+  const { presignedUrl } = await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil: Date.now() + 15 * 60 * 1000 });
+  return { data: presignedUrl, mediaType: 'image/jpeg' };
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; scene: string }> }) {
