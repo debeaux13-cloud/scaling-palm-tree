@@ -5,14 +5,14 @@ import { SignInButton, useAuth } from '@clerk/nextjs';
 type Photo = { pathname: string; name: string }; type Tier = 'three' | 'five'; type Scene = { number: number; status: string; videoPathname?: string; error?: string }; type Order = { id: string; title: string; scenes: Scene[]; status: string; continuationStatus: string; purchase: { status: string } };
 const products = { three: { price: '$49', label: '3-minute movie', scenes: 18 }, five: { price: '$79', label: '5-minute movie', scenes: 30 } } as const;
 export function Creator() {
-  const playerRef = useRef<HTMLVideoElement>(null); const [previewIndex, setPreviewIndex] = useState(0); const [previewSeconds, setPreviewSeconds] = useState(0);
+  const playerRef = useRef<HTMLVideoElement>(null); const pollTimer = useRef<number | null>(null); const [previewIndex, setPreviewIndex] = useState(0); const [previewSeconds, setPreviewSeconds] = useState(0);
   const { isSignedIn } = useAuth(); const [photos, setPhotos] = useState<Photo[]>([]); const [idea, setIdea] = useState(''); const [mood, setMood] = useState('Funny'); const [tier, setTier] = useState<Tier>('three'); const [order, setOrder] = useState<Order | null>(null); const [working, setWorking] = useState(false); const [needsAccount, setNeedsAccount] = useState(false); const [message, setMessage] = useState('Upload a photo. We turn it into a complete animated story.');
   useEffect(() => {
     const params = new URLSearchParams(window.location.search); const id = params.get('order') || window.localStorage.getItem('mcs-order-id');
     if (!id) return; void refreshOrder(id);
     if (params.get('checkout') !== 'success') return;
-    const timer = window.setInterval(() => void refreshOrder(id), 3000);
-    return () => window.clearInterval(timer);
+    pollTimer.current = window.setInterval(() => void refreshOrder(id), 3000);
+    return () => { if (pollTimer.current !== null) window.clearInterval(pollTimer.current); pollTimer.current = null; };
   }, []);
   async function refreshOrder(id: string) { const response = await fetch(`/api/orders/${id}`); if (response.ok) { const data = await response.json(); setOrder(data.order); return data.order as Order; } return null; }
   async function uploadPhoto(file: File): Promise<Photo> { const form = new FormData(); form.set('photo', file); const response = await fetch('/api/uploads/photo', { method: 'POST', body: form }); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Photo upload failed.'); return data as Photo; }
@@ -26,7 +26,7 @@ export function Creator() {
     if (!order || order.purchase.status !== 'paid' || order.continuationStatus !== 'ready' || working) return;
     void continueMovie();
   }, [order?.id, order?.purchase.status, order?.continuationStatus]);
-  function startNewPreview() { window.localStorage.removeItem('mcs-order-id'); setOrder(null); setPreviewIndex(0); setPreviewSeconds(0); setNeedsAccount(false); setWorking(false); setMessage('Upload a photo. We turn it into a complete animated story.'); }
+  function startNewPreview() { if (pollTimer.current !== null) { window.clearInterval(pollTimer.current); pollTimer.current = null; } window.localStorage.removeItem('mcs-order-id'); setOrder(null); setPreviewIndex(0); setPreviewSeconds(0); setNeedsAccount(false); setWorking(false); setMessage('Upload a photo. We turn it into a complete animated story.'); }
   const failedScene = order?.scenes.find((scene) => scene.status === 'failed');
   const previewScenes = order?.scenes.filter((scene) => scene.number <= 6 && scene.videoPathname) ?? [];
   const previewScene = previewScenes[previewIndex];
