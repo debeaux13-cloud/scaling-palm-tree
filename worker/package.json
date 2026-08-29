@@ -10,6 +10,7 @@
   "dependencies": {
     "@vercel/blob": "latest",
     "ai": "latest",
+    "@ai-sdk/gateway": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
