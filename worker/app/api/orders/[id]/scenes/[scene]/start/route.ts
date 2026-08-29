@@ -1,9 +1,15 @@
 import { experimental_startVideo as startVideo } from 'ai';
 import { NextResponse } from 'next/server';
+import { get } from '@vercel/blob';
 import { getOwner } from '../../../../../../../lib/owner';
 import { canRenderScene, readOrder, writeOrder } from '../../../../../../../lib/orders';
 
-const model = 'bytedance/seedance-v1.5-pro';
+const model = 'bytedance/seedance-2.5';
+
+async function referenceImage(pathname: string) {
+  const { stream, blob } = await get(pathname, { access: 'private' });
+  return { data: new Uint8Array(await new Response(stream).arrayBuffer()), mediaType: blob.contentType || 'image/jpeg' };
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; scene: string }> }) {
   const { ownerId } = await getOwner();
@@ -15,7 +21,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canRenderScene(order, scene)) return NextResponse.json({ error: 'Scenes after the preview are locked until verified payment.' }, { status: 402 });
   if (scene.status === 'submitted' || scene.status === 'completed') return NextResponse.json({ error: 'scene is already in progress or complete' }, { status: 409 });
   try {
-    const { operation } = await startVideo({ model, prompt: scene.videoPrompt, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true });
+    const references = await Promise.all(order.subjectPhotoPathnames.slice(0, 3).map(referenceImage));
+    const identityBrief = 'Use [Image 1] and the supplied customer photos as the exact character identity reference. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling.';
+    const { operation } = await startVideo({ model, prompt: `${identityBrief} ${scene.videoPrompt}`, inputReferences: references, aspectRatio: '16:9', resolution: '1920x1080', duration: 10, generateAudio: true });
     scene.status = 'submitted'; scene.operation = operation; order.status = sceneNumber <= 6 ? 'preview-in-progress' : 'fulfillment-in-progress';
     await writeOrder(order);
     return NextResponse.json({ orderId: order.id, scene: sceneNumber, status: scene.status }, { status: 202 });
