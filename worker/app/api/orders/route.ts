@@ -15,6 +15,7 @@ export async function POST(request: Request) {
   const order = { id: orderId, ownerId, title: title.trim(), storyDirection, moods: moods.filter((mood): mood is string => typeof mood === 'string'), subjectPhotoPathnames, createdAt: new Date().toISOString(), status: 'preview-ready' as const, continuationStatus: 'planned' as const, scenes: normalized, purchase: { status: 'not-started' as const }, previewStorybook: { pageCount: previewSceneCount(), status: 'blocked-missing-scene-assets' as const } };
   order.scenes.forEach((scene) => { scene.generation.key = sceneIdentity(orderId, scene.number); });
   await writeOrder({ ...order, workflowStarted: true });
-  await start(movieWorkflow, [orderId]);
+  const run = await start(movieWorkflow, [orderId]);
+  console.info('[MovieWorkflow] started', { orderId, runId: run.runId });
   return NextResponse.json({ order: { ...order, workflowStarted: true } }, { status: 201 });
 }
