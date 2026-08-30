@@ -41,6 +41,21 @@ export function Creator() {
     return data.order as Order;
   }
 
+  function startOver() {
+    if (pollTimer.current !== null) window.clearInterval(pollTimer.current);
+    pollTimer.current = null;
+    window.localStorage.removeItem('mcs-order-id');
+    window.history.replaceState({}, '', window.location.pathname);
+    setOrder(null);
+    setPhotos([]);
+    setIdea('');
+    setMood('Funny');
+    setPreviewSeconds(0);
+    setNeedsAccount(false);
+    setWorking(false);
+    setMessage('Upload a photo. We turn it into a complete animated story.');
+  }
+
   async function recoverLatestOrder() {
     setWorking(true); setMessage('Recovering your saved movie…');
     try {
@@ -122,6 +137,7 @@ export function Creator() {
       </form>
     </>}
     {order && <div className="order-panel">
+      <button type="button" onClick={startOver} disabled={working}>Start over</button>
       <b>{order.title}</b><p>Order status: {order.status.replaceAll('-', ' ')}</p>
       {failedScene && <p className="preview-error">Preview could not start: {failedScene.error ?? 'The video renderer did not return a clip.'}</p>}
       <div className="preview-player">{previewReady && order.previewMoviePathname ? <><video ref={playerRef} key={order.id} controls autoPlay src={`/api/orders/${order.id}/preview/video`} onTimeUpdate={(event) => setPreviewSeconds(event.currentTarget.currentTime)} /><div className="preview-progress"><span style={{ width: `${Math.min(100, (previewSeconds / 60) * 100)}%` }} /></div><p>Preview {Math.min(60, Math.floor(previewSeconds))} / 60 seconds</p></> : <div className="preview-making"><div className="magic-orbit"><span>✦</span><i /><b /></div><p className="making-kicker">YOUR MOVIE IS IN PRODUCTION</p><h3>Building scene {activePreviewScene} of 6</h3><p>We’re bringing their character, story world, movement, sound, and cinematic magic to life.</p><div className="scene-steps">{[1,2,3,4,5,6].map((number) => <span key={number} className={number <= previewComplete ? 'done' : number === activePreviewScene ? 'active' : ''}>Scene {number}</span>)}</div><div className="making-meter"><span style={{ width: `${(previewComplete / 6) * 100}%` }} /></div><strong>{previewComplete} of 6 scenes complete</strong></div>}</div>
