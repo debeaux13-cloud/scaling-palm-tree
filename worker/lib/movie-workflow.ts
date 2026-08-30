@@ -43,7 +43,8 @@ async function generateAndPersistScene(orderId: string, sceneNumber: number) {
   const video = result.videos[0];
   if (!video) throw new Error('Wan completed without returning a video.');
   const videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
-  await put(videoPathname, video.uint8Array, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
+  const videoBody = new Blob([video.uint8Array as Uint8Array<ArrayBuffer>], { type: video.mediaType ?? 'video/mp4' });
+  await put(videoPathname, videoBody, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
 
   await mutateOrder(orderId, (fresh) => {
     const current = fresh.scenes[sceneNumber - 1]; if (!current) return;
