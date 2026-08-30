@@ -1,0 +1,5 @@
+import { get } from '@vercel/blob';
+import { NextResponse } from 'next/server';
+import { getOwner } from '../../../../../../lib/owner';
+import { readOrder } from '../../../../../../lib/orders';
+export async function GET(_: Request, { params }: { params: Promise<{ id: string; asset: string }> }) { const { ownerId } = await getOwner(); const { id, asset } = await params; const order = await readOrder(id); const pathname = asset === 'movie' ? order?.finalMoviePathname : asset === 'storybook' ? order?.finalStorybook?.pathname : undefined; if (!order || order.ownerId !== ownerId || order.status !== 'complete' || !pathname) return NextResponse.json({ error: 'delivery asset not found' }, { status: 404 }); const { stream, blob } = await get(pathname, { access: 'private' }); return new Response(stream, { headers: { 'content-type': blob.contentType ?? 'application/octet-stream', 'content-disposition': `inline; filename="${id}-${asset}.${asset === 'movie' ? 'mp4' : 'pdf'}"`, 'cache-control': 'private, no-store' } }); }
