@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { start } from 'workflow/api';
 import { getOwner } from '../../../lib/owner';
 import { listOrders, previewSceneCount, sceneIdentity, type Scene, writeOrder } from '../../../lib/orders';
 import { movieWorkflow } from '../../../lib/movie-workflow';
@@ -14,6 +15,6 @@ export async function POST(request: Request) {
   const order = { id: orderId, ownerId, title: title.trim(), storyDirection, moods: moods.filter((mood): mood is string => typeof mood === 'string'), subjectPhotoPathnames, createdAt: new Date().toISOString(), status: 'preview-ready' as const, continuationStatus: 'not-selected' as const, scenes: normalized, purchase: { status: 'not-started' as const }, previewStorybook: { pageCount: previewSceneCount(), status: 'blocked-missing-scene-assets' as const } };
   order.scenes.forEach((scene) => { scene.generation.key = sceneIdentity(orderId, scene.number); });
   await writeOrder({ ...order, workflowStarted: true });
-  await movieWorkflow(orderId);
+  await start(movieWorkflow, [orderId]);
   return NextResponse.json({ order: { ...order, workflowStarted: true } }, { status: 201 });
 }
