@@ -6,7 +6,7 @@ import { assembleMovie } from './movie-assembly';
 import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
 
 const model = 'alibaba/wan-v2.6-r2v';
-const CONCURRENCY = 2;
+const CONCURRENCY = 1;
 
 async function generateAndPersistScene(orderId: string, sceneNumber: number) {
   'use step';
