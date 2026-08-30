@@ -5,7 +5,7 @@ import { createWebhook } from 'workflow';
 import { assembleMovie } from './movie-assembly';
 import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
 
-const model = 'bytedance/seedance-2.5';
+const model = 'klingai/kling-v3.0-i2v';
 const CONCURRENCY = 2;
 
 async function startScene(orderId: string, sceneNumber: number, webhookUrl: string) {
@@ -30,13 +30,13 @@ async function persistSceneResult(orderId: string, sceneNumber: number, operatio
   const result = await getVideoStatus(model, { operation: operation as never });
   if (result.status !== 'completed') {
     const details = JSON.stringify(result);
-    console.error('[Seedance] video operation not completed', { orderId, sceneNumber, details });
+    console.error('[Kling] video operation not completed', { orderId, sceneNumber, details });
     throw new Error(`AI Gateway video generation failed: ${details}`);
   }
   const video = result.videos[0];
   if (!video || video.type !== 'url') {
     const details = JSON.stringify(result);
-    console.error('[Seedance] completed operation returned no usable URL video', { orderId, sceneNumber, details });
+    console.error('[Kling] completed operation returned no usable URL video', { orderId, sceneNumber, details });
     throw new Error(`AI Gateway video generation failed: ${details}`);
   }
   const videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
