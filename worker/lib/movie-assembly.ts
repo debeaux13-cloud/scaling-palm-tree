@@ -9,11 +9,9 @@ export async function assembleMovie(orderId: string, clips: { number: number; pa
   const root = `/tmp/mcs-${orderId}-${kind}`; const output = `studio/orders/${orderId}/${kind}/movie.mp4`; const pdf = `studio/orders/${orderId}/final/storybook.pdf`;
   const sandbox = await Sandbox.create({ image: 'vercel/sandbox/universal:latest', persistent: false, timeout: 15 * 60 * 1000, resources: { vcpus: 2 } });
   try {
-    // Preview assembly needs ffmpeg only. Do not install Chromium during preview: the previous
-    // combined apt transaction failed in dpkg before ffmpeg could be used.
-    const setupCommand = kind === 'preview'
-      ? 'command -v ffmpeg >/dev/null || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg)'
-      : 'command -v ffmpeg >/dev/null || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg)';
+    // Recover an interrupted package transaction before installing the one preview dependency.
+    // Each workflow attempt starts a fresh ephemeral sandbox, so this is safe and idempotent.
+    const setupCommand = 'command -v ffmpeg >/dev/null || (dpkg --configure -a || true; DEBIAN_FRONTEND=noninteractive apt-get -f install -y || true; apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg)';
     const setup = await sandbox.runCommand('bash', ['-lc', setupCommand]);
     if (setup.exitCode !== 0) throw new Error(await setup.stderr());
     await sandbox.runCommand('bash', ['-lc', `mkdir -p ${shell(root)}`]);
