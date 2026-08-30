@@ -3,7 +3,7 @@ import { issueSignedToken, presignUrl, put } from '@vercel/blob';
 import { z } from 'zod';
 import { createWebhook } from 'workflow';
 import { assembleMovie } from './movie-assembly';
-import { previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
+import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
 
 const model = 'bytedance/seedance-2.5';
 const CONCURRENCY = 2;
@@ -16,8 +16,12 @@ async function startScene(orderId: string, sceneNumber: number, webhookUrl: stri
   const identityBrief = 'Use the supplied signed customer-photo URLs as exact character identity references. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling.';
   const inputReferences = await Promise.all(order.subjectPhotoPathnames.slice(0, 3).map(async (pathname) => { const validUntil = Date.now() + 15 * 60 * 1000; const token = await issueSignedToken({ pathname, operations: ['get'], validUntil }); return (await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil, useCache: false })).presignedUrl; }));
   const { operation } = await startVideo({ model, prompt: `${identityBrief} ${scene.videoPrompt}`, inputReferences, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true, webhookUrl });
-  scene.status = 'submitted'; scene.generation = { ...scene.generation, operation, webhookUrl, attempts: scene.generation.attempts + 1 };
-  order.status = sceneNumber <= previewSceneCount() ? 'preview-in-progress' : 'fulfillment-in-progress'; await writeOrder(order); return operation;
+  await mutateOrder(orderId, (fresh) => {
+    const current = fresh.scenes[sceneNumber - 1]; if (!current) return;
+    current.status = 'submitted'; current.generation = { ...current.generation, operation, webhookUrl, attempts: current.generation.attempts + 1 };
+    fresh.status = sceneNumber <= previewSceneCount() ? 'preview-in-progress' : 'fulfillment-in-progress';
+  });
+  return operation;
 }
 async function persistSceneResult(orderId: string, sceneNumber: number, operation: unknown) {
   'use step';
@@ -26,10 +30,13 @@ async function persistSceneResult(orderId: string, sceneNumber: number, operatio
   const result = await getVideoStatus(model, { operation: operation as never });
   if (result.status !== 'completed' || !result.videos[0] || result.videos[0].type !== 'url') throw new Error('AI Gateway video generation failed');
   const video = result.videos[0];
-  scene.videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
+  const videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
   const response = await fetch(video.url); if (!response.ok || !response.body) throw new Error(`Video download failed with ${response.status}`);
-  await put(scene.videoPathname, response.body, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
-  scene.status = 'completed'; scene.generation.operation = operation; delete scene.error; await writeOrder(order);
+  await put(videoPathname, response.body, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
+  await mutateOrder(orderId, (fresh) => {
+    const current = fresh.scenes[sceneNumber - 1]; if (!current) return;
+    current.videoPathname = videoPathname; current.status = 'completed'; current.generation.operation = operation; delete current.error;
+  });
 }
 async function assemble(orderId: string, kind: 'preview' | 'final') {
   'use step';
