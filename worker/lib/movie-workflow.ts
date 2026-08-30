@@ -5,7 +5,7 @@ import { createWebhook } from 'workflow';
 import { assembleMovie } from './movie-assembly';
 import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
 
-const model = 'klingai/kling-v3.0-i2v';
+const model = 'alibaba/wan-v2.6-r2v';
 const CONCURRENCY = 2;
 
 async function startScene(orderId: string, sceneNumber: number, webhookUrl: string) {
@@ -13,7 +13,7 @@ async function startScene(orderId: string, sceneNumber: number, webhookUrl: stri
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
   const scene = order.scenes[sceneNumber - 1];
   if (!scene || scene.status === 'completed' || scene.generation.operation) return scene?.generation.operation;
-  const identityBrief = 'Use the supplied signed customer-photo URLs as exact character identity references. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling.';
+  const identityBrief = 'Use character1, character2, and character3 for the supplied customer-photo references in order. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling.';
   const inputReferences = await Promise.all(order.subjectPhotoPathnames.slice(0, 3).map(async (pathname) => { const validUntil = Date.now() + 15 * 60 * 1000; const token = await issueSignedToken({ pathname, operations: ['get'], validUntil }); return (await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil, useCache: false })).presignedUrl; }));
   const { operation } = await startVideo({ model, prompt: `${identityBrief} ${scene.videoPrompt}`, inputReferences, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true, webhookUrl });
   await mutateOrder(orderId, (fresh) => {
@@ -30,13 +30,13 @@ async function persistSceneResult(orderId: string, sceneNumber: number, operatio
   const result = await getVideoStatus(model, { operation: operation as never });
   if (result.status !== 'completed') {
     const details = JSON.stringify(result);
-    console.error('[Kling] video operation not completed', { orderId, sceneNumber, details });
+    console.error('[Wan] video operation not completed', { orderId, sceneNumber, details });
     throw new Error(`AI Gateway video generation failed: ${details}`);
   }
   const video = result.videos[0];
   if (!video || video.type !== 'url') {
     const details = JSON.stringify(result);
-    console.error('[Kling] completed operation returned no usable URL video', { orderId, sceneNumber, details });
+    console.error('[Wan] completed operation returned no usable URL video', { orderId, sceneNumber, details });
     throw new Error(`AI Gateway video generation failed: ${details}`);
   }
   const videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
