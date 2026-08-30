@@ -6,7 +6,6 @@ import { assembleMovie } from './movie-assembly';
 import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
 
 const model = 'alibaba/wan-v2.6-r2v';
-const CONCURRENCY = 2;
 
 async function generateAndPersistScene(orderId: string, sceneNumber: number) {
   'use step';
@@ -67,8 +66,8 @@ async function assemble(orderId: string, kind: 'preview' | 'final') {
   await writeOrder(latest);
 }
 async function generateBatch(orderId: string, sceneNumbers: number[]) {
-  for (let i = 0; i < sceneNumbers.length; i += CONCURRENCY) {
-    await Promise.all(sceneNumbers.slice(i, i + CONCURRENCY).map((number) => generateAndPersistScene(orderId, number)));
+  for (const number of sceneNumbers) {
+    await generateAndPersistScene(orderId, number);
   }
 }
 export async function movieWorkflow(orderId: string) {
