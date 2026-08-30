@@ -28,8 +28,17 @@ async function persistSceneResult(orderId: string, sceneNumber: number, operatio
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found'); const scene = order.scenes[sceneNumber - 1];
   if (scene.status === 'completed') return;
   const result = await getVideoStatus(model, { operation: operation as never });
-  if (result.status !== 'completed' || !result.videos[0] || result.videos[0].type !== 'url') throw new Error('AI Gateway video generation failed');
+  if (result.status !== 'completed') {
+    const details = JSON.stringify(result);
+    console.error('[Seedance] video operation not completed', { orderId, sceneNumber, details });
+    throw new Error(`AI Gateway video generation failed: ${details}`);
+  }
   const video = result.videos[0];
+  if (!video || video.type !== 'url') {
+    const details = JSON.stringify(result);
+    console.error('[Seedance] completed operation returned no usable URL video', { orderId, sceneNumber, details });
+    throw new Error(`AI Gateway video generation failed: ${details}`);
+  }
   const videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
   const response = await fetch(video.url); if (!response.ok || !response.body) throw new Error(`Video download failed with ${response.status}`);
   await put(videoPathname, response.body, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
