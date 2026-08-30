@@ -1,4 +1,4 @@
-import { experimental_getVideoStatus as getVideoStatus, experimental_startVideo as startVideo, generateObject } from 'ai';
+import { experimental_generateVideo as generateVideo, generateObject } from 'ai';
 import { issueSignedToken, presignUrl, put } from '@vercel/blob';
 import { z } from 'zod';
 import { createWebhook } from 'workflow';
@@ -8,45 +8,52 @@ import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from '
 const model = 'alibaba/wan-v2.6-r2v';
 const CONCURRENCY = 2;
 
-async function startScene(orderId: string, sceneNumber: number, webhookUrl: string) {
+async function generateAndPersistScene(orderId: string, sceneNumber: number) {
   'use step';
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
   const scene = order.scenes[sceneNumber - 1];
-  if (!scene || scene.status === 'completed' || scene.generation.operation) return scene?.generation.operation;
-  const identityBrief = 'Use character1, character2, and character3 for the supplied customer-photo references in order. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling.';
-  const inputReferences = await Promise.all(order.subjectPhotoPathnames.slice(0, 3).map(async (pathname) => { const validUntil = Date.now() + 15 * 60 * 1000; const token = await issueSignedToken({ pathname, operations: ['get'], validUntil }); return (await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil, useCache: false })).presignedUrl; }));
-  const { operation } = await startVideo({ model, prompt: `${identityBrief} ${scene.videoPrompt}`, inputReferences, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true, webhookUrl });
+  if (!scene || scene.status === 'completed') return scene?.videoPathname;
+
   await mutateOrder(orderId, (fresh) => {
     const current = fresh.scenes[sceneNumber - 1]; if (!current) return;
-    current.status = 'submitted'; current.generation = { ...current.generation, operation, webhookUrl, attempts: current.generation.attempts + 1 };
+    current.status = 'submitted';
+    current.generation = { ...current.generation, attempts: current.generation.attempts + 1 };
     fresh.status = sceneNumber <= previewSceneCount() ? 'preview-in-progress' : 'fulfillment-in-progress';
   });
-  return operation;
-}
-async function persistSceneResult(orderId: string, sceneNumber: number, operation: unknown) {
-  'use step';
-  const order = await readOrder(orderId); if (!order) throw new Error('Order not found'); const scene = order.scenes[sceneNumber - 1];
-  if (scene.status === 'completed') return;
-  const result = await getVideoStatus(model, { operation: operation as never });
-  if (result.status !== 'completed') {
-    const details = JSON.stringify(result);
-    console.error('[Wan] video operation not completed', { orderId, sceneNumber, details });
-    throw new Error(`AI Gateway video generation failed: ${details}`);
-  }
+
+  const identityBrief = 'Use character1, character2, and character3 for the supplied customer-photo references in order. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling.';
+  const inputReferences = await Promise.all(order.subjectPhotoPathnames.slice(0, 3).map(async (pathname) => {
+    const validUntil = Date.now() + 15 * 60 * 1000;
+    const token = await issueSignedToken({ pathname, operations: ['get'], validUntil });
+    return (await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil, useCache: false })).presignedUrl;
+  }));
+
+  const result = await generateVideo({
+    model,
+    prompt: `${identityBrief} ${scene.videoPrompt}`,
+    inputReferences,
+    aspectRatio: '16:9',
+    resolution: '1280x720',
+    duration: 10,
+    generateAudio: true,
+    providerOptions: { alibaba: { shotType: 'single' } },
+    poll: { intervalMs: 5000, timeoutMs: 600000 },
+  });
+
   const video = result.videos[0];
-  if (!video || video.type !== 'url') {
-    const details = JSON.stringify(result);
-    console.error('[Wan] completed operation returned no usable URL video', { orderId, sceneNumber, details });
-    throw new Error(`AI Gateway video generation failed: ${details}`);
-  }
+  if (!video) throw new Error('Wan completed without returning a video.');
   const videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
-  const response = await fetch(video.url); if (!response.ok || !response.body) throw new Error(`Video download failed with ${response.status}`);
-  await put(videoPathname, response.body, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
+  await put(videoPathname, video.uint8Array, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
+
   await mutateOrder(orderId, (fresh) => {
     const current = fresh.scenes[sceneNumber - 1]; if (!current) return;
-    current.videoPathname = videoPathname; current.status = 'completed'; current.generation.operation = operation; delete current.error;
+    current.videoPathname = videoPathname;
+    current.status = 'completed';
+    delete current.error;
   });
+  return videoPathname;
 }
+
 async function assemble(orderId: string, kind: 'preview' | 'final') {
   'use step';
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found'); const count = kind === 'preview' ? 6 : tierFor(order)?.sceneCount;
@@ -59,9 +66,9 @@ async function assemble(orderId: string, kind: 'preview' | 'final') {
   await writeOrder(latest);
 }
 async function generateBatch(orderId: string, sceneNumbers: number[]) {
-  for (let i = 0; i < sceneNumbers.length; i += CONCURRENCY) await Promise.all(sceneNumbers.slice(i, i + CONCURRENCY).map(async (number) => {
-    using webhook = createWebhook(); const operation = await startScene(orderId, number, webhook.url); if (!operation) return; await webhook; await persistSceneResult(orderId, number, operation);
-  }));
+  for (let i = 0; i < sceneNumbers.length; i += CONCURRENCY) {
+    await Promise.all(sceneNumbers.slice(i, i + CONCURRENCY).map((number) => generateAndPersistScene(orderId, number)));
+  }
 }
 export async function movieWorkflow(orderId: string) {
   'use workflow';
