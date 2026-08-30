@@ -2,30 +2,134 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { SignInButton, useAuth } from '@clerk/nextjs';
-type Photo = { pathname: string; name: string }; type Tier = 'three'; type Scene = { number: number; status: string; narration?: string; videoPrompt?: string; videoPathname?: string; error?: string }; type GeneratedStory = { title: string; scenes: { number: number; narration: string; videoPrompt: string }[] }; type Order = { id: string; title: string; scenes: Scene[]; status: string; continuationStatus: string; previewMoviePathname?: string; purchase: { status: string } };
+type Photo = { pathname: string; name: string };
+type Tier = 'three';
+type Scene = { number: number; status: string; narration?: string; videoPrompt?: string; videoPathname?: string; error?: string };
+type GeneratedStory = { title: string; scenes: { narration: string; videoPrompt: string }[] };
+type Order = { id: string; title: string; scenes: Scene[]; status: string; continuationStatus: string; previewMoviePathname?: string; purchase: { status: string } };
 const products = { three: { price: '$49', label: '3-minute movie', scenes: 18 } } as const;
+
 export function Creator() {
-  const playerRef = useRef<HTMLVideoElement>(null); const pollTimer = useRef<number | null>(null); const [previewIndex, setPreviewIndex] = useState(0); const [previewSeconds, setPreviewSeconds] = useState(0);
-  const { isSignedIn } = useAuth(); const [photos, setPhotos] = useState<Photo[]>([]); const [idea, setIdea] = useState(''); const [mood, setMood] = useState('Funny'); const [tier, setTier] = useState<Tier>('three'); const [order, setOrder] = useState<Order | null>(null); const [generatedStory, setGeneratedStory] = useState<GeneratedStory | null>(null); const [working, setWorking] = useState(false); const [needsAccount, setNeedsAccount] = useState(false); const [message, setMessage] = useState('Upload a photo. We turn it into a complete animated story.');
+  const playerRef = useRef<HTMLVideoElement>(null);
+  const pollTimer = useRef<number | null>(null);
+  const { isSignedIn } = useAuth();
+  const [previewSeconds, setPreviewSeconds] = useState(0);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [idea, setIdea] = useState('');
+  const [mood, setMood] = useState('Funny');
+  const [tier] = useState<Tier>('three');
+  const [order, setOrder] = useState<Order | null>(null);
+  const [working, setWorking] = useState(false);
+  const [needsAccount, setNeedsAccount] = useState(false);
+  const [message, setMessage] = useState('Upload a photo. We turn it into a complete animated story.');
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search); const id = params.get('order') || window.localStorage.getItem('mcs-order-id');
-    if (!id) return; void refreshOrder(id);
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('order') || window.localStorage.getItem('mcs-order-id');
+    if (!id) return;
+    void refreshOrder(id);
     if (params.get('checkout') !== 'success') return;
     pollTimer.current = window.setInterval(() => void refreshOrder(id), 3000);
     return () => { if (pollTimer.current !== null) window.clearInterval(pollTimer.current); pollTimer.current = null; };
   }, []);
-  async function refreshOrder(id: string) { const response = await fetch(`/api/orders/${id}`); if (response.ok) { const data = await response.json(); setOrder(data.order); return data.order as Order; } return null; }
-  async function recoverLatestOrder() { setWorking(true); setMessage('Recovering your saved movie…'); try { const response = await fetch('/api/orders'); const data = await response.json(); const recovered = data.orders?.[0] as Order | undefined; if (!response.ok || !recovered) throw new Error('No saved movie was found for this browser session.'); window.localStorage.setItem('mcs-order-id', recovered.id); setOrder(recovered); setMessage('Your saved movie is back.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to recover your saved movie.'); } finally { setWorking(false); } }
-  async function uploadPhoto(file: File): Promise<Photo> { const form = new FormData(); form.set('photo', file); const response = await fetch('/api/uploads/photo', { method: 'POST', body: form }); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Photo upload failed.'); return data as Photo; }
-  async function uploadPhotos(files: FileList | null) { if (!files?.length) return; const selected = Array.from(files).slice(0, 3 - photos.length); if (!selected.length) return setMessage('You can add up to three photos.'); setMessage('Saving your photo privately…'); try { const first = await uploadPhoto(selected[0]); const uploaded = [first, ...(selected.length > 1 ? await Promise.all(selected.slice(1).map(uploadPhoto)) : [])]; setPhotos((current) => [...current, ...uploaded]); setGeneratedStory(null); setMessage('Perfect. Tell us a little—or let us make the magic.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Photo upload failed.'); } }
-  async function waitForScenes(id: string, numbers: number[]) { for (;;) { const results = await Promise.all(numbers.map(async (number) => { const response = await fetch(`/api/orders/${id}/scenes/${number}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? `Scene ${number} failed.`); return data.scene as Scene; })); setOrder((current) => current ? { ...current, scenes: current.scenes.map((scene) => results.find((result) => result.number === scene.number) ?? scene) } : current); if (results.some((scene) => scene.status === 'failed')) throw new Error('A scene failed to generate. Try again later.'); if (results.every((scene) => scene.status === 'completed')) return; await new Promise((resolve) => setTimeout(resolve, 6000)); } }
-  async function runScenes(current: Order, numbers: number[], label: string) { if (!numbers.length) return; setWorking(true); setMessage(`Starting ${label}…`); try { for (const number of numbers) { const response = await fetch(`/api/orders/${current.id}/scenes/${number}/start`, { method: 'POST' }); if (!response.ok && response.status !== 409) { const data = await response.json(); throw new Error(data.error ?? 'Unable to start movie production.'); } await waitForScenes(current.id, [number]); } const updated = await refreshOrder(current.id); setMessage(numbers[0] === 1 ? 'Your 60-second opening preview is ready. Choose how long you want the full story to be.' : `Your ${updated?.scenes.length === 30 ? '5' : '3'}-minute story scenes are ready.`); } catch (error) { setMessage(error instanceof Error ? error.message : 'Movie production failed.'); } finally { setWorking(false); } }
-  async function createStory(event: FormEvent) { event.preventDefault(); setWorking(true); setMessage('Writing their story…'); try { const response = await fetch('/api/story', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ premise: idea, subjectPhotoPathnames: photos.map((photo) => photo.pathname), moods: [mood] }) }); const story = await response.json(); if (!response.ok) throw new Error(story.error ?? 'Story creation failed.'); setGeneratedStory(story.story as GeneratedStory); setMessage('Your story is ready. Read it below, then create the free 60-second preview when you are ready.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Story creation failed.'); } finally { setWorking(false); } }
-  async function createPreview() { if (!generatedStory) return; setWorking(true); setMessage('Starting their magical 60-second opening…'); try { const created = await fetch('/api/orders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...generatedStory, storyDirection: idea, moods: [mood], subjectPhotoPathnames: photos.map((photo) => photo.pathname) }) }); const data = await created.json(); if (!created.ok) throw new Error(data.error ?? 'Order setup failed.'); window.localStorage.setItem('mcs-order-id', data.order.id); setOrder(data.order); setMessage('Your preview is generating securely in the background. You can safely close this page.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Preview could not start.'); } finally { setWorking(false); } }
-  async function checkout() { if (!order) return; setWorking(true); setNeedsAccount(false); try { const response = await fetch('/api/orders/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ orderId: order.id, tier }) }); const data = await response.json(); if (data.needsAccount) { setNeedsAccount(true); throw new Error('Create your free account to save this story, then unlock it.'); } if (!response.ok) throw new Error(data.error ?? 'Checkout could not start.'); window.location.assign(data.checkoutUrl); } catch (error) { setMessage(error instanceof Error ? error.message : 'Checkout could not start.'); setWorking(false); } }
+
+  async function refreshOrder(id: string) {
+    const response = await fetch(`/api/orders/${id}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    setOrder(data.order);
+    return data.order as Order;
+  }
+
+  async function recoverLatestOrder() {
+    setWorking(true); setMessage('Recovering your saved movie…');
+    try {
+      const response = await fetch('/api/orders'); const data = await response.json(); const recovered = data.orders?.[0] as Order | undefined;
+      if (!response.ok || !recovered) throw new Error('No saved movie was found for this browser session.');
+      window.localStorage.setItem('mcs-order-id', recovered.id); setOrder(recovered); setMessage('Your saved movie is back.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to recover your saved movie.'); }
+    finally { setWorking(false); }
+  }
+
+  async function uploadPhoto(file: File): Promise<Photo> {
+    const form = new FormData(); form.set('photo', file);
+    const response = await fetch('/api/uploads/photo', { method: 'POST', body: form }); const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? 'Photo upload failed.'); return data as Photo;
+  }
+
+  async function uploadPhotos(files: FileList | null) {
+    if (!files?.length) return;
+    const selected = Array.from(files).slice(0, 3 - photos.length);
+    if (!selected.length) return setMessage('You can add up to three photos.');
+    setMessage('Saving your photo privately…');
+    try {
+      const first = await uploadPhoto(selected[0]);
+      const uploaded = [first, ...(selected.length > 1 ? await Promise.all(selected.slice(1).map(uploadPhoto)) : [])];
+      setPhotos((current) => [...current, ...uploaded]); setMessage('Perfect. Tell us the adventure you want—or leave it blank and we’ll make the magic.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Photo upload failed.'); }
+  }
+
+  async function createMovie(event: FormEvent) {
+    event.preventDefault(); setWorking(true); setMessage('Writing the complete 3-minute story and starting your free 60-second preview…');
+    try {
+      const storyResponse = await fetch('/api/story', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ premise: idea, subjectPhotoPathnames: photos.map((photo) => photo.pathname), moods: [mood] }) });
+      const storyData = await storyResponse.json();
+      if (!storyResponse.ok) throw new Error(storyData.error ?? 'Story creation failed.');
+      const story = storyData.story as GeneratedStory;
+      const created = await fetch('/api/orders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...story, storyDirection: idea, moods: [mood], subjectPhotoPathnames: photos.map((photo) => photo.pathname) }) });
+      const data = await created.json();
+      if (!created.ok) throw new Error(data.error ?? 'Preview setup failed.');
+      window.localStorage.setItem('mcs-order-id', data.order.id); setOrder(data.order);
+      setMessage('Your free 60-second preview is generating. The full 3-minute story is already planned and will continue after purchase.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Preview could not start.'); }
+    finally { setWorking(false); }
+  }
+
+  async function checkout() {
+    if (!order) return; setWorking(true); setNeedsAccount(false);
+    try {
+      const response = await fetch('/api/orders/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ orderId: order.id, tier }) });
+      const data = await response.json();
+      if (data.needsAccount) { setNeedsAccount(true); throw new Error('Create your free account to save this story, then unlock it.'); }
+      if (!response.ok) throw new Error(data.error ?? 'Checkout could not start.');
+      window.location.assign(data.checkoutUrl);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Checkout could not start.'); setWorking(false); }
+  }
+
   async function continueMovie() { if (!order) return; setWorking(true); setMessage('Your movie is continuing securely in the background.'); try { await refreshOrder(order.id); } finally { setWorking(false); } }
-  useEffect(() => { if (!order || ['awaiting-payment', 'complete', 'failed'].includes(order.status)) return; const timer = window.setInterval(() => void refreshOrder(order.id), 5000); return () => window.clearInterval(timer); }, [order?.id, order?.status]);
-  const failedScene = order?.scenes.find((scene) => scene.status === 'failed'); const previewScenes = order?.scenes.filter((scene) => scene.number <= 6 && scene.videoPathname) ?? []; const previewScene = previewScenes[previewIndex]; const previewReady = order?.status === 'awaiting-payment'; const previewComplete = order?.scenes.filter((scene) => scene.number <= 6 && scene.status === 'completed').length ?? 0; const activePreviewScene = order?.scenes.find((scene) => scene.number <= 6 && scene.status === 'submitted')?.number ?? Math.min(6, previewComplete + 1);
-  function advancePreview() { if (previewIndex < previewScenes.length - 1) { setPreviewIndex((current) => current + 1); setPreviewSeconds(0); } }
-  return <section className="creator"><div className="creator-header"><div><p className="eyebrow">Your private movie studio</p><h2>Make them the star</h2></div></div><p className="creator-lede">No screenplay. No account yet. Upload a photo and we make the story.</p>{!order && <><button type="button" onClick={() => void recoverLatestOrder()} disabled={working}>Recover my order</button>{!generatedStory ? <form onSubmit={createStory}><div className="photo-upload"><label>1. Upload their photo<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => void uploadPhotos(event.target.files)} /></label><p>One photo is enough. Add up to three if you want.</p>{photos.length > 0 && <ul>{photos.map((photo) => <li key={photo.pathname}>{photo.name}</li>)}</ul>}</div><label>2. Pick a vibe<select value={mood} onChange={(event) => setMood(event.target.value)}>{['Funny', 'Fantasy', 'Adventure', 'Dramatic', 'Sci-fi', 'Scary'].map((item) => <option key={item}>{item}</option>)}</select></label><label>Optional: what should happen?<textarea value={idea} onChange={(event) => setIdea(event.target.value)} placeholder="Tiffani and her dog Remi go on a Halloween adventure—or leave blank and we’ll make it up." /></label><button type="submit" disabled={!photos.length || working}>{idea.trim() ? 'Create my story' : 'Create a story for me'}</button></form> : <div className="story-review"><p className="eyebrow">Your story</p><h3>{generatedStory.title}</h3>{generatedStory.scenes.map((scene) => <div key={scene.number} className="story-scene"><strong>Scene {scene.number}</strong><p>{scene.narration}</p></div>)}<button type="button" onClick={() => setGeneratedStory(null)} disabled={working}>Edit my idea</button><button type="button" onClick={() => void createPreview()} disabled={working}>Create my free 60-second preview</button></div>}</>}{order && <div className="order-panel"><b>{order.title}</b><p>Order status: {order.status.replaceAll('-', ' ')}</p>{failedScene && <p className="preview-error">Preview could not start: {failedScene.error ?? 'The video renderer did not return a clip.'}</p>}<div className="preview-player">{previewReady && order.previewMoviePathname ? <><video ref={playerRef} key={order.id} controls autoPlay src={`/api/orders/${order.id}/preview/video`} onTimeUpdate={(event) => setPreviewSeconds(event.currentTarget.currentTime)} /><div className="preview-progress"><span style={{ width: `${Math.min(100, (previewSeconds / 60) * 100)}%` }} /></div><p>Preview {Math.min(60, Math.floor(previewSeconds))} / 60 seconds</p></> : <div className="preview-making"><div className="magic-orbit"><span>✦</span><i /><b /></div><p className="making-kicker">YOUR MOVIE IS IN PRODUCTION</p><h3>Building scene {activePreviewScene} of 6</h3><p>We’re bringing their character, story world, movement, sound, and cinematic magic to life.</p><div className="scene-steps">{[1, 2, 3, 4, 5, 6].map((number) => <span key={number} className={number <= previewComplete ? 'done' : number === activePreviewScene ? 'active' : ''}>Scene {number}</span>)}</div><div className="making-meter"><span style={{ width: `${(previewComplete / 6) * 100}%` }} /></div><strong>{previewComplete} of 6 scenes complete</strong></div>}</div>{previewReady && <><p>Love the preview? Choose the full movie length.</p><p>$49 — 3-minute movie + Storybook</p>{needsAccount && !isSignedIn ? <SignInButton mode="modal"><button>Create your free account to unlock</button></SignInButton> : <button onClick={() => void checkout()} disabled={working}>Unlock the {products[tier].label}</button>}</>}{order.purchase.status === 'checkout-created' && <button onClick={() => void continueMovie()} disabled={working}>Continue my movie</button>}{order.purchase.status === 'paid' && order.continuationStatus !== 'planned' && <button onClick={() => void continueMovie()} disabled={working}>Continue my movie</button>}</div>}<div className="movie-promise"><span>One photo. One real story.</span><b>Watch the first 60 seconds free</b><span>Choose the full length only after you love it</span><strong>$49 for a 3-minute movie plus the matching Storybook</strong></div><p className="status" role="status">{message}</p></section>;
+
+  useEffect(() => {
+    if (!order || ['awaiting-payment', 'complete', 'failed'].includes(order.status)) return;
+    const timer = window.setInterval(() => void refreshOrder(order.id), 5000);
+    return () => window.clearInterval(timer);
+  }, [order?.id, order?.status]);
+
+  const failedScene = order?.scenes.find((scene) => scene.status === 'failed');
+  const previewReady = order?.status === 'awaiting-payment';
+  const previewComplete = order?.scenes.filter((scene) => scene.number <= 6 && scene.status === 'completed').length ?? 0;
+  const activePreviewScene = order?.scenes.find((scene) => scene.number <= 6 && scene.status === 'submitted')?.number ?? Math.min(6, previewComplete + 1);
+
+  return <section className="creator">
+    <div className="creator-header"><div><p className="eyebrow">Your private movie studio</p><h2>Make them the star</h2></div></div>
+    <p className="creator-lede">No screenplay. No account yet. Upload a photo, tell us the adventure, and we make the movie.</p>
+    {!order && <>
+      <button type="button" onClick={() => void recoverLatestOrder()} disabled={working}>Recover my order</button>
+      <form onSubmit={createMovie}>
+        <div className="photo-upload"><label>1. Upload their photo<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => void uploadPhotos(event.target.files)} /></label><p>One photo is enough. Add up to three if you want.</p>{photos.length > 0 && <ul>{photos.map((photo) => <li key={photo.pathname}>{photo.name}</li>)}</ul>}</div>
+        <label>2. Pick a vibe<select value={mood} onChange={(event) => setMood(event.target.value)}>{['Funny', 'Fantasy', 'Adventure', 'Dramatic', 'Sci-fi', 'Scary'].map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label>3. Tell us the adventure<textarea value={idea} onChange={(event) => setIdea(event.target.value)} placeholder="Tiffani and her dog Remi go on a scary Halloween adventure—or leave blank and we’ll create the adventure." /></label>
+        <button type="submit" disabled={!photos.length || working}>{working ? 'Making the magic…' : 'Create my free 60-second preview'}</button>
+      </form>
+    </>}
+    {order && <div className="order-panel">
+      <b>{order.title}</b><p>Order status: {order.status.replaceAll('-', ' ')}</p>
+      {failedScene && <p className="preview-error">Preview could not start: {failedScene.error ?? 'The video renderer did not return a clip.'}</p>}
+      <div className="preview-player">{previewReady && order.previewMoviePathname ? <><video ref={playerRef} key={order.id} controls autoPlay src={`/api/orders/${order.id}/preview/video`} onTimeUpdate={(event) => setPreviewSeconds(event.currentTarget.currentTime)} /><div className="preview-progress"><span style={{ width: `${Math.min(100, (previewSeconds / 60) * 100)}%` }} /></div><p>Preview {Math.min(60, Math.floor(previewSeconds))} / 60 seconds</p></> : <div className="preview-making"><div className="magic-orbit"><span>✦</span><i /><b /></div><p className="making-kicker">YOUR MOVIE IS IN PRODUCTION</p><h3>Building scene {activePreviewScene} of 6</h3><p>We’re bringing their character, story world, movement, sound, and cinematic magic to life.</p><div className="scene-steps">{[1,2,3,4,5,6].map((number) => <span key={number} className={number <= previewComplete ? 'done' : number === activePreviewScene ? 'active' : ''}>Scene {number}</span>)}</div><div className="making-meter"><span style={{ width: `${(previewComplete / 6) * 100}%` }} /></div><strong>{previewComplete} of 6 scenes complete</strong></div>}</div>
+      {previewReady && <><p>Love the preview? Unlock the rest of this same story.</p><p>$49 — 3-minute movie + Storybook</p>{needsAccount && !isSignedIn ? <SignInButton mode="modal"><button>Create your free account to unlock</button></SignInButton> : <button onClick={() => void checkout()} disabled={working}>Unlock the {products[tier].label}</button>}</>}
+      {order.purchase.status === 'checkout-created' && <button onClick={() => void continueMovie()} disabled={working}>Continue my movie</button>}
+      {order.purchase.status === 'paid' && order.continuationStatus !== 'planned' && <button onClick={() => void continueMovie()} disabled={working}>Continue my movie</button>}
+    </div>}
+    <div className="movie-promise"><span>One photo. One real story.</span><b>Watch the first 60 seconds free</b><span>We write the full 3-minute adventure for you</span><strong>$49 for the 3-minute movie plus the matching Storybook</strong></div>
+    <p className="status" role="status">{message}</p>
+  </section>;
 }
