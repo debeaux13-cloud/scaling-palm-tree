@@ -6,7 +6,9 @@ import { assembleMovie } from './movie-assembly';
 import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
 
 const model = 'alibaba/wan-v2.6-r2v';
-const CONCURRENCY = 2;
+// Order state is persisted as one Blob object. Durable workflow steps run in separate
+// function instances, so in-memory serialization cannot protect concurrent writes.
+const CONCURRENCY = 1;
 
 async function generateAndPersistScene(orderId: string, sceneNumber: number) {
   'use step';
