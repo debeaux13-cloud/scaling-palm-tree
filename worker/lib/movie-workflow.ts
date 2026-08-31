@@ -6,15 +6,13 @@ import { assembleMovie } from './movie-assembly';
 import { mutateOrder, previewSceneCount, readOrder, tierFor, writeOrder } from './orders';
 
 const model = 'alibaba/wan-v2.6-r2v';
-// Order state is persisted as one Blob object. Durable workflow steps run in separate
-// function instances, so in-memory serialization cannot protect concurrent writes.
 const CONCURRENCY = 1;
 
 async function generateAndPersistScene(orderId: string, sceneNumber: number) {
   'use step';
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
   const scene = order.scenes[sceneNumber - 1];
-  if (!scene || scene.status === 'completed') return scene?.videoPathname;
+  if (!scene || (scene.status === 'completed' && scene.videoPathname)) return scene?.videoPathname;
 
   await mutateOrder(orderId, (fresh) => {
     const current = fresh.scenes[sceneNumber - 1]; if (!current) return;
@@ -30,31 +28,21 @@ async function generateAndPersistScene(orderId: string, sceneNumber: number) {
     return (await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil, useCache: false })).presignedUrl;
   }));
 
-  const result = await generateVideo({
-    model,
-    prompt: `${identityBrief} ${scene.videoPrompt}`,
-    inputReferences,
-    aspectRatio: '16:9',
-    resolution: '1280x720',
-    duration: 10,
-    generateAudio: true,
-    providerOptions: { alibaba: { shotType: 'single' } },
-    poll: { intervalMs: 5000, timeoutMs: 600000 },
-  });
-
-  const video = result.videos[0];
-  if (!video) throw new Error('Wan completed without returning a video.');
+  const result = await generateVideo({ model, prompt: `${identityBrief} ${scene.videoPrompt}`, inputReferences, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true, providerOptions: { alibaba: { shotType: 'single' } }, poll: { intervalMs: 5000, timeoutMs: 600000 } });
+  const video = result.videos[0]; if (!video) throw new Error('Wan completed without returning a video.');
   const videoPathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`;
   const videoBody = new Blob([video.uint8Array as Uint8Array<ArrayBuffer>], { type: video.mediaType ?? 'video/mp4' });
   await put(videoPathname, videoBody, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
-
-  await mutateOrder(orderId, (fresh) => {
-    const current = fresh.scenes[sceneNumber - 1]; if (!current) return;
-    current.videoPathname = videoPathname;
-    current.status = 'completed';
-    delete current.error;
-  });
+  await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[sceneNumber - 1]; if (!current) return; current.videoPathname = videoPathname; current.status = 'completed'; delete current.error; });
   return videoPathname;
+}
+
+async function requireCompletedScenes(orderId: string, count: number) {
+  'use step';
+  const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
+  const incomplete = order.scenes.slice(0, count).filter((scene) => scene.status !== 'completed' || !scene.videoPathname).map((scene) => scene.number);
+  if (incomplete.length) throw new Error(`Generation returned before persisted completion for scenes: ${incomplete.join(', ')}`);
+  return true;
 }
 
 async function assemble(orderId: string, kind: 'preview' | 'final') {
@@ -69,16 +57,19 @@ async function assemble(orderId: string, kind: 'preview' | 'final') {
   await writeOrder(latest);
 }
 async function generateBatch(orderId: string, sceneNumbers: number[]) {
-  for (let i = 0; i < sceneNumbers.length; i += CONCURRENCY) {
-    await Promise.all(sceneNumbers.slice(i, i + CONCURRENCY).map((number) => generateAndPersistScene(orderId, number)));
-  }
+  for (let i = 0; i < sceneNumbers.length; i += CONCURRENCY) await generateAndPersistScene(orderId, sceneNumbers[i]);
 }
 export async function movieWorkflow(orderId: string) {
   'use workflow';
-  await generateBatch(orderId, [1, 2, 3, 4, 5, 6]); await assemble(orderId, 'preview');
+  await generateBatch(orderId, [1, 2, 3, 4, 5, 6]);
+  await requireCompletedScenes(orderId, 6);
+  await assemble(orderId, 'preview');
   using payment = createWebhook();
   await setPaymentWebhook(orderId, payment.url); await payment;
-  const order = await planContinuation(orderId); await generateBatch(orderId, order.scenes.filter((scene) => scene.number > 6).map((scene) => scene.number)); await assemble(orderId, 'final');
+  const order = await planContinuation(orderId); const finalSceneNumbers = order.scenes.filter((scene) => scene.number > 6).map((scene) => scene.number);
+  await generateBatch(orderId, finalSceneNumbers);
+  await requireCompletedScenes(orderId, order.scenes.length);
+  await assemble(orderId, 'final');
 }
 async function setPaymentWebhook(orderId: string, url: string) { 'use step'; const order = await readOrder(orderId); if (!order) throw new Error('Order not found'); await writeOrder({ ...order, paymentWebhookUrl: url }); }
 async function planContinuation(orderId: string) { 'use step'; const order = await readOrder(orderId); if (!order || !order.tier) throw new Error('Paid package is not selected'); if (order.tier !== 'three') throw new Error('The 5-minute product is not enabled in this workflow'); if (order.scenes.length === 18) return order; const schema = z.object({ scenes: z.array(z.object({ narration: z.string().min(1), videoPrompt: z.string().min(1) })).length(12) }); const opening = order.scenes.map((scene) => `Opening ${scene.number}: ${scene.narration}; ${scene.videoPrompt}`).join('\n'); const { object } = await generateObject({ model: 'openai/gpt-5.4', schema, prompt: `Continue this exact six-scene opening into a connected 18-scene, 180-second movie. Return exactly 12 new ten-second scenes without rewriting the opening. Preserve character, world, and narration continuity.\n${opening}` }); const scenes = [...order.scenes, ...object.scenes.map((scene, index) => ({ number: index + 7, narration: scene.narration, videoPrompt: scene.videoPrompt, status: 'ready' as const, generation: { key: `${orderId}:${index + 7}`, attempts: 0 } }))]; const updated = { ...order, scenes, continuationStatus: 'planned' as const, status: 'ready-for-fulfillment' as const }; await writeOrder(updated); return updated; }
