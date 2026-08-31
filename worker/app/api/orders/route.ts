@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { getOwner } from '../../../lib/owner';
 import { listOrders, previewSceneCount, sceneIdentity, type Scene, writeOrder } from '../../../lib/orders';
-import { movieWorkflow } from '../../../lib/movie-workflow';
+import * as movieWorkflowModule from '../../../lib/movie-workflow';
+
 export async function GET() { const { ownerId } = await getOwner(); return NextResponse.json({ orders: await listOrders(ownerId) }); }
 export async function POST(request: Request) {
   const { ownerId } = await getOwner(); const { title, scenes, subjectPhotoPathnames = [], moods = [], storyDirection = '' } = await request.json();
@@ -14,7 +15,9 @@ export async function POST(request: Request) {
   const orderId = randomUUID(); const order = { id: orderId, ownerId, title: title.trim(), storyDirection, moods: moods.filter((mood): mood is string => typeof mood === 'string'), subjectPhotoPathnames, createdAt: new Date().toISOString(), status: 'preview-ready' as const, continuationStatus: 'planned' as const, scenes: normalized, purchase: { status: 'not-started' as const }, previewStorybook: { pageCount: previewSceneCount(), status: 'blocked-missing-scene-assets' as const } };
   order.scenes.forEach((scene) => { scene.generation.key = sceneIdentity(orderId, scene.number); });
   await writeOrder({ ...order, workflowStarted: true });
-  const run = await start(movieWorkflow, [orderId]);
+  // Keep the workflow module as a namespace reference so the Workflow compiler cannot
+  // tree-shake the registration while the route still retains a callable proxy.
+  const run = await start(movieWorkflowModule.movieWorkflow, [orderId]);
   console.info('[MovieWorkflow] started', { orderId, runId: run.runId });
   return NextResponse.json({ order: { ...order, workflowStarted: true } }, { status: 201 });
 }
