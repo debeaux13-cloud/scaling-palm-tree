@@ -6,10 +6,21 @@ import { mutateOrder, previewSceneCount, readOrder } from './orders';
 const model = 'alibaba/wan-v2.6-r2v';
 const PREVIEW_CONCURRENCY = 2;
 
+async function assembleIfReady(orderId: string) {
+  const order = await readOrder(orderId); if (!order || order.previewMoviePathname) return;
+  const previewScenes = order.scenes.slice(0, previewSceneCount());
+  if (previewScenes.some((scene) => scene.status !== 'completed' || !scene.videoPathname)) return;
+  const clips = previewScenes.map((scene) => ({ number: scene.number, pathname: scene.videoPathname!, narration: scene.narration }));
+  console.info('[DirectPreview] all six complete; assembly starting', { orderId });
+  const assets = await assembleMovie(orderId, clips, 'preview');
+  await mutateOrder(orderId, (fresh) => { if (!fresh.previewMoviePathname) { fresh.previewMoviePathname = assets.moviePathname; fresh.status = 'awaiting-payment'; } });
+  console.info('[DirectPreview] assembly completed', { orderId, previewMoviePathname: assets.moviePathname });
+}
+
 async function generateScene(orderId: string, sceneNumber: number) {
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
   const scene = order.scenes[sceneNumber - 1]; if (!scene) throw new Error(`Scene ${sceneNumber} not found`);
-  if (scene.status === 'completed' && scene.videoPathname) { console.info('[DirectPreview] scene reused', { orderId, sceneNumber }); return; }
+  if (scene.status === 'completed' && scene.videoPathname) { console.info('[DirectPreview] scene reused', { orderId, sceneNumber }); await assembleIfReady(orderId); return; }
   if (scene.status === 'submitted') { console.info('[DirectPreview] scene already in flight; skipping duplicate', { orderId, sceneNumber }); return; }
 
   let claimed = false;
@@ -30,6 +41,7 @@ async function generateScene(orderId: string, sceneNumber: number) {
     await put(pathname, body, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
     await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[sceneNumber - 1]; if (!current) return; current.videoPathname = pathname; current.status = 'completed'; delete current.error; });
     console.info('[DirectPreview] scene generation completed', { orderId, sceneNumber, pathname });
+    await assembleIfReady(orderId);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[sceneNumber - 1]; if (!current) return; current.status = 'ready'; current.error = message; });
@@ -43,11 +55,5 @@ export async function runDirectPreview(orderId: string) {
   for (let index = 0; index < sceneNumbers.length; index += PREVIEW_CONCURRENCY) {
     await Promise.all(sceneNumbers.slice(index, index + PREVIEW_CONCURRENCY).map((sceneNumber) => generateScene(orderId, sceneNumber)));
   }
-  const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
-  const clips = order.scenes.slice(0, previewSceneCount()).map((scene) => ({ number: scene.number, pathname: scene.videoPathname!, narration: scene.narration }));
-  if (clips.some((clip) => !clip.pathname)) { console.info('[DirectPreview] assembly deferred; scenes still in flight', { orderId }); return; }
-  console.info('[DirectPreview] assembly starting', { orderId });
-  const assets = await assembleMovie(orderId, clips, 'preview');
-  await mutateOrder(orderId, (fresh) => { fresh.previewMoviePathname = assets.moviePathname; fresh.status = 'awaiting-payment'; });
-  console.info('[DirectPreview] assembly completed', { orderId, previewMoviePathname: assets.moviePathname });
+  await assembleIfReady(orderId);
 }
