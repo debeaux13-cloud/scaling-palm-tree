@@ -2,9 +2,15 @@ import Stripe from 'stripe';
 import { NextResponse } from 'next/server';
 import { readOrder, writeOrder } from '../../../../lib/orders';
 import { getStripe, isStripeConfigured } from '../../../../lib/stripe';
+
+function activeWebhookSecret() {
+  if (process.env.STRIPE_CHECKOUT_MODE === 'test') return process.env.STRIPE_TEST_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET;
+  return process.env.STRIPE_WEBHOOK_SECRET;
+}
+
 export async function POST(request: Request) {
   if (!isStripeConfigured()) return NextResponse.json({ error: 'Stripe webhook is not configured.' }, { status: 503 });
-  const signature = request.headers.get('stripe-signature'); const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const signature = request.headers.get('stripe-signature'); const secret = activeWebhookSecret();
   if (!signature || !secret) return NextResponse.json({ error: 'Stripe webhook verification is not configured.' }, { status: 503 });
   let event: Stripe.Event; try { event = getStripe().webhooks.constructEvent(await request.text(), signature, secret); } catch { return NextResponse.json({ error: 'Invalid Stripe webhook signature.' }, { status: 400 }); }
   if (event.type !== 'checkout.session.completed') return NextResponse.json({ received: true });
