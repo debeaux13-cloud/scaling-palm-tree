@@ -5,7 +5,9 @@ import { mutateOrder, previewSceneCount, readOrder } from './orders';
 
 const model = 'alibaba/wan-v2.6-r2v';
 const PREVIEW_CONCURRENCY = 2;
-const FULFILLMENT_CONCURRENCY = 2;
+const FULFILLMENT_CONCURRENCY = 1;
+const PAID_VIDEO_REQUEST_INTERVAL_MS = 60_000;
+const MAX_PAID_RATE_LIMIT_RETRIES = 3;
 const MAX_PREVIEW_SCENE_ATTEMPTS = 2;
 function scenePathname(orderId: string, sceneNumber: number) { return `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`; }
 async function storedSceneExists(orderId: string, sceneNumber: number) { try { await head(scenePathname(orderId, sceneNumber)); return true; } catch (error) { if (error instanceof BlobNotFoundError) return false; throw error; } }
@@ -50,7 +52,24 @@ export async function runDirectFulfillment(orderId: string) {
   if (initial.finalMoviePathname || initial.status === 'complete') return;
   const sceneNumbers = initial.scenes.filter((scene) => scene.number > 6 && !(scene.status === 'completed' && scene.videoPathname)).map((scene) => scene.number);
   console.info('[DirectMovie] paid fulfillment', { orderId, missingPaidScenes: sceneNumbers.length, sceneNumbers });
-  for (let index = 0; index < sceneNumbers.length; index += FULFILLMENT_CONCURRENCY) await Promise.all(sceneNumbers.slice(index, index + FULFILLMENT_CONCURRENCY).map((sceneNumber) => generateScene(orderId, sceneNumber, true)));
+  for (let index = 0; index < sceneNumbers.length; index += FULFILLMENT_CONCURRENCY) {
+    let retries = 0;
+    while (true) {
+      try {
+        await generateScene(orderId, sceneNumbers[index], true);
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('429') || retries >= MAX_PAID_RATE_LIMIT_RETRIES) throw error;
+        retries += 1;
+        console.warn('[DirectMovie] paid scene rate-limited; waiting before retry', { orderId, sceneNumber: sceneNumbers[index], retries });
+        await new Promise((resolve) => setTimeout(resolve, PAID_VIDEO_REQUEST_INTERVAL_MS));
+      }
+    }
+    if (index + FULFILLMENT_CONCURRENCY < sceneNumbers.length) {
+      await new Promise((resolve) => setTimeout(resolve, PAID_VIDEO_REQUEST_INTERVAL_MS));
+    }
+  }
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
   const clips = order.scenes.slice(0, 18).map((scene) => ({ number: scene.number, pathname: scene.videoPathname!, narration: scene.narration }));
   if (clips.some((clip) => !clip.pathname)) throw new Error('Cannot assemble final movie before all 18 scenes are complete');
