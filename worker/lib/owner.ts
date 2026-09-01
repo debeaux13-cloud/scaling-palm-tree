@@ -4,6 +4,12 @@ import { randomUUID } from 'node:crypto';
 
 const COOKIE = 'mcs_preview_session';
 
+export async function getGuestPreviewOwner() {
+  const store = await cookies();
+  const guestId = store.get(COOKIE)?.value;
+  return guestId?.startsWith('guest:') ? guestId : null;
+}
+
 export async function getOwner() {
   const { userId } = await auth();
   if (userId) return { ownerId: `user:${userId}`, userId, isGuest: false };
