@@ -12,28 +12,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!order || order.ownerId !== ownerId) return NextResponse.json({ error: 'order not found' }, { status: 404 });
   const paid = order.purchase.status === 'paid'; const finalMissing = !order.finalMoviePathname && order.status !== 'complete';
 
-  // A legacy recovery may leave continuationStatus='planning' forever after its function died.
-  // For a PAID order whose UI/order progress says all 18 scenes are complete, that stale lock
-  // must never prevent finalization. Reclaim it only into the ASSEMBLY-ONLY path. This path
-  // cannot call generateVideo and therefore cannot spend AI credits.
+  // Reclaim a stale legacy `planning` lock only when the order's existing progress helper
+  // confirms all final scenes are done. orderProgress exposes finalDone/finalTotal.
+  // The launched path is assembly-only and cannot call generateVideo or spend AI credits.
   const progress = orderProgress(order);
-  const progressComplete = progress.completedScenes >= 18;
+  const progressComplete = progress.finalTotal >= 18 && progress.finalDone >= progress.finalTotal;
   if (paid && finalMissing && progressComplete) {
     let claimed = false;
-    order = await mutateOrder(id, (fresh) => {
-      if (fresh.purchase.status !== 'paid' || fresh.finalMoviePathname || fresh.status === 'complete') return;
-      // Deliberately reclaim even a stale `planning` value. Safe because the only work launched
-      // from this branch is assembleDirectFinalIfComplete(), which is storage/assembly only.
-      fresh.continuationStatus = 'planning'; claimed = true;
-    });
+    order = await mutateOrder(id, (fresh) => { if (fresh.purchase.status !== 'paid' || fresh.finalMoviePathname || fresh.status === 'complete') return; fresh.continuationStatus = 'planning'; claimed = true; });
     if (claimed) {
-      console.info('[DirectMovie] ASSEMBLY-ONLY stale lock reclaimed at 18/18', { orderId: id });
+      console.info('[DirectMovie] ASSEMBLY-ONLY stale lock reclaimed at 18/18', { orderId: id, finalDone: progress.finalDone, finalTotal: progress.finalTotal });
       after(async () => { try { const assembled = await assembleDirectFinalIfComplete(id); if (!assembled) { await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'failed'; }); console.warn('[DirectMovie] ASSEMBLY-ONLY 18/18 storage verification found missing MP4; AI remains blocked from this path', { orderId: id }); } } catch (error) { console.error('[DirectMovie] ASSEMBLY-ONLY stale-lock finalization failed', { orderId: id, error }); await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'failed'; }); } });
     }
     return NextResponse.json({ order, progress: orderProgress(order) });
   }
 
-  // Normal paid orders: storage-first probe before any credit-capped generation recovery.
   if (paid && finalMissing && order.continuationStatus !== 'planning') {
     let claimed = false; order = await mutateOrder(id, (fresh) => { if (fresh.purchase.status === 'paid' && !fresh.finalMoviePathname && fresh.status !== 'complete' && fresh.continuationStatus !== 'planning') { fresh.continuationStatus = 'planning'; claimed = true; } });
     if (claimed) { after(async () => { try { if (await assembleDirectFinalIfComplete(id)) return; await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'ready'; }); } catch (error) { console.error('[DirectMovie] STORAGE-FIRST assembly probe failed', { orderId: id, error }); await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'failed'; }); } }); }
