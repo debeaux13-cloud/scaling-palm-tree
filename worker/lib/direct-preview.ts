@@ -11,6 +11,21 @@ function scenePathname(orderId: string, sceneNumber: number) { return `studio/or
 async function storedSceneExists(orderId: string, sceneNumber: number) { try { await head(scenePathname(orderId, sceneNumber)); return true; } catch (error) { if (error instanceof BlobNotFoundError) return false; throw error; } }
 async function recoverStoredScene(orderId: string, sceneNumber: number) { const pathname = scenePathname(orderId, sceneNumber); if (!(await storedSceneExists(orderId, sceneNumber))) return false; await mutateOrder(orderId, (fresh) => { const scene = fresh.scenes[sceneNumber - 1]; if (!scene) return; scene.videoPathname = pathname; scene.status = 'completed'; delete scene.error; }); console.info('[DirectMovie] CREDIT-GUARD stored MP4 reused; zero new generation', { orderId, sceneNumber, pathname }); return true; }
 
+export async function reconcileStalePaidScenes(orderId: string) {
+  const order = await readOrder(orderId);
+  if (!order || order.purchase.status !== 'paid') return;
+  for (const scene of order.scenes.filter((scene) => scene.number > previewSceneCount())) {
+    if (await recoverStoredScene(orderId, scene.number)) continue;
+    if (scene.status === 'submitted') {
+      await mutateOrder(orderId, (fresh) => {
+        const current = fresh.scenes[scene.number - 1];
+        if (current?.status === 'submitted' && !current.videoPathname) current.status = 'ready';
+      });
+      console.info('[DirectMovie] stale submitted scene reset; no stored MP4 found', { orderId, sceneNumber: scene.number });
+    }
+  }
+}
+
 async function assembleVerifiedStoredPreview(orderId: string) {
   const order = await readOrder(orderId); if (!order || order.previewMoviePathname) return;
   const checks = await Promise.all(Array.from({ length: previewSceneCount() }, async (_, index) => ({ number: index + 1, exists: await storedSceneExists(orderId, index + 1) })));
