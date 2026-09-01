@@ -1,7 +1,8 @@
 import Stripe from 'stripe';
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { readOrder, writeOrder } from '../../../../lib/orders';
 import { getStripe, isStripeConfigured } from '../../../../lib/stripe';
+import { runDirectFulfillment } from '../../../../lib/direct-preview';
 
 function activeWebhookSecret() {
   if (process.env.STRIPE_CHECKOUT_MODE === 'test') return process.env.STRIPE_TEST_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET;
@@ -19,7 +20,13 @@ export async function POST(request: Request) {
   const order = await readOrder(orderId); if (!order) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
   const paid = { ...order, status: 'ready-for-fulfillment' as const, continuationStatus: order.continuationStatus === 'planned' ? 'planned' as const : 'ready' as const, purchase: { status: 'paid' as const, checkoutSessionId: session.id, paidAt: new Date().toISOString(), resumeFromScene: 7 } };
   await writeOrder(paid);
-  if (!paid.paymentWebhookUrl) return NextResponse.json({ error: 'Movie workflow is not waiting for payment.' }, { status: 409 });
+  if (!paid.paymentWebhookUrl) {
+    after(async () => {
+      try { console.info('[DirectMovie] Stripe starting direct paid fulfillment', { orderId }); await runDirectFulfillment(orderId); }
+      catch (error) { console.error('[DirectMovie] Stripe direct paid fulfillment failed', { orderId, error }); }
+    });
+    return NextResponse.json({ received: true, directFulfillmentStarted: true, resumeFromScene: 7 });
+  }
   const resumed = await fetch(paid.paymentWebhookUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ orderId, checkoutSessionId: session.id }) });
   if (!resumed.ok) return NextResponse.json({ error: 'Unable to resume movie workflow.' }, { status: 502 });
   return NextResponse.json({ received: true, resumeFromScene: 7 });
