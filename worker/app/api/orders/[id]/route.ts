@@ -1,7 +1,7 @@
 import { after, NextResponse } from 'next/server';
 import { getGuestPreviewOwner, getOwner } from '../../../../lib/owner';
 import { mutateOrder, orderProgress, readOrder } from '../../../../lib/orders';
-import { runDirectFulfillment } from '../../../../lib/direct-preview';
+import { reconcileStalePaidScenes, runDirectFulfillment } from '../../../../lib/direct-preview';
 
 export const maxDuration = 1800;
 
@@ -25,6 +25,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // means it can be claimed, and `failed` records a recovery failure. The lower-level
   // CREDIT-GUARD remains authoritative for stored-scene reuse and duplicate blocking.
   const paid = order.purchase.status === 'paid';
+  if (paid) {
+    await reconcileStalePaidScenes(id);
+    order = await readOrder(id);
+    if (!order) return NextResponse.json({ error: 'order not found' }, { status: 404 });
+  }
   const complete = order.status === 'complete' || Boolean(order.finalMoviePathname);
   const submitted = order.scenes.some((scene) => scene.number > 6 && scene.status === 'submitted');
   const recoveryAlreadyClaimed = order.continuationStatus === 'planning';
