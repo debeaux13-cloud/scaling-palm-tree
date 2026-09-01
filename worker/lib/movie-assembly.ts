@@ -26,7 +26,7 @@ export async function assembleMovie(orderId: string, clips: { number: number; pa
     const upload = await sandbox.runCommand('bash', ['-lc', `curl --fail --location --silent --show-error -X PUT -H 'content-type: video/mp4' --upload-file ${shell(`${root}/movie.mp4`)} ${shell(await signedPut(output, 'video/mp4'))}`]);
     if (upload.exitCode !== 0) throw new Error(await upload.stderr());
     if (kind === 'final') {
-      const chromiumSetup = await sandbox.runCommand('bash', ['-lc', 'command -v chromium >/dev/null || (sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends chromium)']);
+      const chromiumSetup = await sandbox.runCommand('bash', ['-lc', 'if command -v chromium >/dev/null; then exit 0; fi; DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends chromium && command -v chromium >/dev/null']);
       if (chromiumSetup.exitCode !== 0) throw new Error(await chromiumSetup.stderr());
       for (const clip of clips) await sandbox.runCommand('bash', ['-lc', `ffmpeg -y -i ${shell(`${root}/${clip.number}.mp4`)} -frames:v 1 ${shell(`${root}/${clip.number}.jpg`)}`]);
       const pages = [...clips].sort((a, b) => a.number - b.number).map((clip) => `<section><img src="file://${root}/${clip.number}.jpg"><p>${clip.narration.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p></section>`).join('');
