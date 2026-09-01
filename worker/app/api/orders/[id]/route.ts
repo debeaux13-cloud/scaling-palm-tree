@@ -18,11 +18,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       console.info('[Orders] guest preview claimed by signed-in account', { orderId: id });
     }
   }
+
   if (!order || order.ownerId !== ownerId) return NextResponse.json({ error: 'order not found' }, { status: 404 });
 
-  // EXACT paid-order polling handoff from the known-good #82 production build.
-  // Credit/cash authorization rules remain in direct-preview.ts; this route only decides
-  // whether fulfillment is awake. Do not gate the handoff on attempt counters here.
   const paid = order.purchase.status === 'paid';
   if (paid) {
     await reconcileStalePaidScenes(id);
@@ -43,11 +41,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       claimed = true;
     });
     if (claimed) {
-      console.info('[DirectMovie] KNOWN-GOOD paid recovery claimed from polling', { orderId: id });
+      console.info('[DirectMovie] stalled paid order recovery claimed from polling', { orderId: id });
       after(async () => {
         try { await runDirectFulfillment(id); }
         catch (error) {
-          console.error('[DirectMovie] KNOWN-GOOD paid recovery stopped', { orderId: id, error });
+          console.error('[DirectMovie] stalled paid order recovery failed', { orderId: id, error });
           await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'failed'; });
         }
       });
