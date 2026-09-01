@@ -5,7 +5,9 @@ import { isProductTier, PRODUCT_TIERS, readOrder, writeOrder } from '../../../..
 
 function authorizedTestOwner(signedInOwner: string) {
   const allowed = process.env.MCS_TEST_CHECKOUT_OWNER;
-  return Boolean(allowed && signedInOwner === allowed);
+  if (!allowed) return false;
+  const normalized = allowed.startsWith('user:user_') ? allowed.slice(5) : allowed;
+  return signedInOwner === `user:${normalized}`;
 }
 
 export async function POST(request: Request) {
