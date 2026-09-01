@@ -1,10 +1,25 @@
 import { experimental_generateVideo as generateVideo } from 'ai';
-import { issueSignedToken, presignUrl, put } from '@vercel/blob';
+import { BlobNotFoundError, head, issueSignedToken, presignUrl, put } from '@vercel/blob';
 import { assembleMovie } from './movie-assembly';
 import { mutateOrder, previewSceneCount, readOrder } from './orders';
 
 const model = 'alibaba/wan-v2.6-r2v';
 const PREVIEW_CONCURRENCY = 2;
+
+function scenePathname(orderId: string, sceneNumber: number) { return `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`; }
+
+async function recoverStoredScene(orderId: string, sceneNumber: number) {
+  const pathname = scenePathname(orderId, sceneNumber);
+  try {
+    await head(pathname);
+    await mutateOrder(orderId, (fresh) => { const scene = fresh.scenes[sceneNumber - 1]; if (!scene) return; scene.videoPathname = pathname; scene.status = 'completed'; delete scene.error; });
+    console.info('[DirectPreview] stored MP4 found; scene recovered without Wan', { orderId, sceneNumber, pathname });
+    return true;
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return false;
+    throw error;
+  }
+}
 
 async function assembleIfReady(orderId: string) {
   const order = await readOrder(orderId); if (!order || order.previewMoviePathname) return;
@@ -21,6 +36,7 @@ async function generateScene(orderId: string, sceneNumber: number) {
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
   const scene = order.scenes[sceneNumber - 1]; if (!scene) throw new Error(`Scene ${sceneNumber} not found`);
   if (scene.status === 'completed' && scene.videoPathname) { console.info('[DirectPreview] scene reused', { orderId, sceneNumber }); await assembleIfReady(orderId); return; }
+  if (await recoverStoredScene(orderId, sceneNumber)) { await assembleIfReady(orderId); return; }
   if (scene.status === 'submitted') { console.info('[DirectPreview] scene already in flight; skipping duplicate', { orderId, sceneNumber }); return; }
 
   let claimed = false;
@@ -37,7 +53,7 @@ async function generateScene(orderId: string, sceneNumber: number) {
     const identityBrief = 'Use character1, character2, and character3 for the supplied customer-photo references in order. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling.';
     const result = await generateVideo({ model, prompt: `${identityBrief} ${scene.videoPrompt}`, inputReferences, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true, providerOptions: { alibaba: { shotType: 'single' } }, poll: { intervalMs: 5000, timeoutMs: 600000 } });
     const video = result.videos[0]; if (!video) throw new Error(`Wan returned no video for scene ${sceneNumber}`);
-    const pathname = `studio/orders/${orderId}/scenes/${sceneNumber}/movie.mp4`; const body = new Blob([video.uint8Array as Uint8Array<ArrayBuffer>], { type: video.mediaType ?? 'video/mp4' });
+    const pathname = scenePathname(orderId, sceneNumber); const body = new Blob([video.uint8Array as Uint8Array<ArrayBuffer>], { type: video.mediaType ?? 'video/mp4' });
     await put(pathname, body, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true });
     await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[sceneNumber - 1]; if (!current) return; current.videoPathname = pathname; current.status = 'completed'; delete current.error; });
     console.info('[DirectPreview] scene generation completed', { orderId, sceneNumber, pathname });
