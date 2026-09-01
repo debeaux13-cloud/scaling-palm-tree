@@ -5,7 +5,7 @@ export const PRODUCT_TIERS = {
   five: { id: 'five', label: '5-Minute Movie Package', priceCents: 7900, targetRuntimeSeconds: 300, sceneCount: 30, storybookPages: 30 },
 } as const;
 export type ProductTier = keyof typeof PRODUCT_TIERS;
-export type GenerationIdentity = { key: string; operation?: unknown; webhookUrl?: string; attempts: number };
+export type GenerationIdentity = { key: string; operation?: unknown; webhookUrl?: string; attempts: number; startedAt?: string };
 export type Scene = { number: number; narration: string; videoPrompt: string; artworkPathname?: string; videoPathname?: string; status: 'locked' | 'ready' | 'submitted' | 'completed' | 'failed'; generation: GenerationIdentity; error?: string };
 export type Storybook = { pageCount: number; status: 'locked' | 'blocked-missing-scene-assets' | 'ready'; pathname?: string };
 export type MovieOrder = {
