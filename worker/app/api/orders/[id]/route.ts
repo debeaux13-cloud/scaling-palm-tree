@@ -11,9 +11,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   let order = await readOrder(id);
   if (!order) return NextResponse.json({ error: 'order not found' }, { status: 404 });
 
-  // A preview created before sign-in belongs to the browser's private guest cookie.
-  // When that same browser signs in, atomically attach that exact saved order to the
-  // Clerk account instead of making the preview disappear or regenerating anything.
   if (!isGuest && order.ownerId !== ownerId) {
     const guestOwner = await getGuestPreviewOwner();
     if (guestOwner && order.ownerId === guestOwner) {
@@ -24,22 +21,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!order || order.ownerId !== ownerId) return NextResponse.json({ error: 'order not found' }, { status: 404 });
 
-  // Self-heal a paid direct-preview order whose Stripe request timed out before
-  // fulfillment could reconcile. Polling may enter here repeatedly, so only the
-  // first request is allowed to claim the recovery. The lower-level CREDIT-GUARD
-  // independently reuses stored clips and blocks duplicate AI generation.
+  // Existing order states only: `planning` is the atomic recovery claim, `ready`
+  // means it can be claimed, and `failed` records a recovery failure. The lower-level
+  // CREDIT-GUARD remains authoritative for stored-scene reuse and duplicate blocking.
   const paid = order.purchase.status === 'paid';
   const complete = order.status === 'complete' || Boolean(order.finalMoviePathname);
   const submitted = order.scenes.some((scene) => scene.number > 6 && scene.status === 'submitted');
-  const recoveryAlreadyClaimed = order.continuationStatus === 'direct-recovery-started';
+  const recoveryAlreadyClaimed = order.continuationStatus === 'planning';
   if (paid && !complete && !submitted && !recoveryAlreadyClaimed) {
     let claimed = false;
     order = await mutateOrder(id, (fresh) => {
       const stillPaid = fresh.purchase.status === 'paid';
       const stillIncomplete = fresh.status !== 'complete' && !fresh.finalMoviePathname;
       const nowSubmitted = fresh.scenes.some((scene) => scene.number > 6 && scene.status === 'submitted');
-      if (!stillPaid || !stillIncomplete || nowSubmitted || fresh.continuationStatus === 'direct-recovery-started') return;
-      fresh.continuationStatus = 'direct-recovery-started';
+      if (!stillPaid || !stillIncomplete || nowSubmitted || fresh.continuationStatus === 'planning') return;
+      fresh.continuationStatus = 'planning';
       claimed = true;
     });
     if (claimed) {
@@ -48,7 +44,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         try { await runDirectFulfillment(id); }
         catch (error) {
           console.error('[DirectMovie] stalled paid order recovery failed', { orderId: id, error });
-          await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'direct-recovery-started') fresh.continuationStatus = 'direct-recovery-failed'; });
+          await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'failed'; });
         }
       });
     }
