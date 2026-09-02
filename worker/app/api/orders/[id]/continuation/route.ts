@@ -1,7 +1,7 @@
-import { after, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getOwner } from '../../../../../lib/owner';
 import { readOrder } from '../../../../../lib/orders';
-import { runDirectFulfillment } from '../../../../../lib/direct-preview';
+import { startPaidFulfillment } from '../../../../../lib/paid-fulfillment-workflow';
 
 export const maxDuration = 1800;
 
@@ -12,9 +12,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (order.finalMoviePathname || order.status === 'complete') return NextResponse.json({ order, alreadyComplete: true });
   const submitted = order.scenes.filter((scene) => scene.number > 6 && scene.status === 'submitted').map((scene) => scene.number);
   if (submitted.length) return NextResponse.json({ order, alreadyRunning: true, submitted }, { status: 202 });
-  after(async () => {
-    try { console.info('[DirectMovie] paid continuation started', { orderId: id }); await runDirectFulfillment(id); }
-    catch (error) { console.error('[DirectMovie] paid continuation failed', { orderId: id, error }); }
-  });
+  await startPaidFulfillment(id);
+  console.info('[DirectMovie] paid continuation started as durable workflow', { orderId: id });
   return NextResponse.json({ order, started: true, nextScene: 7 }, { status: 202 });
 }

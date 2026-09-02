@@ -1,7 +1,8 @@
-import { after, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getGuestPreviewOwner, getOwner } from '../../../../lib/owner';
 import { mutateOrder, orderProgress, readOrder } from '../../../../lib/orders';
-import { reconcileStalePaidScenes, runDirectFulfillment } from '../../../../lib/direct-preview';
+import { reconcileStalePaidScenes } from '../../../../lib/direct-preview';
+import { startPaidFulfillment } from '../../../../lib/paid-fulfillment-workflow';
 
 export const maxDuration = 1800;
 
@@ -43,13 +44,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (releasedOrphan) console.info('[DirectMovie] orphaned planning claim atomically reclaimed', { orderId: id });
     if (claimed) {
       console.info('[DirectMovie] paid runner atomically claimed', { orderId: id });
-      after(async () => {
-        try { await runDirectFulfillment(id); }
-        catch (error) {
-          console.error('[DirectMovie] paid runner stopped', { orderId: id, error });
-          await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'failed'; });
-        }
-      });
+      try { await startPaidFulfillment(id); }
+      catch (error) {
+        console.error('[DirectMovie] paid workflow start failed', { orderId: id, error });
+        await mutateOrder(id, (fresh) => { if (fresh.continuationStatus === 'planning') fresh.continuationStatus = 'failed'; });
+      }
     }
   }
 
