@@ -10,6 +10,7 @@
   "dependencies": {
     "@ai-sdk/gateway": "latest",
     "@clerk/nextjs": "latest",
+    "@neondatabase/serverless": "latest",
     "@vercel/blob": "latest",
     "@vercel/sandbox": "^3.2.1",
     "@vercel/speed-insights": "^2.0.0",
