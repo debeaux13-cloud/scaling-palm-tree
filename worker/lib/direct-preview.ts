@@ -21,7 +21,7 @@ export async function reconcileStalePaidScenes(orderId: string) {
     if (await recoverStoredScene(orderId, scene.number)) continue;
     const startedAt = scene.generation.startedAt ? Date.parse(scene.generation.startedAt) : 0;
     if (scene.status === 'submitted' && (!startedAt || Date.now() - startedAt >= STALE_PAID_SCENE_MS)) {
-      await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[scene.number - 1]; if (current?.status === 'submitted' && !current.videoPathname) { current.status = 'failed'; current.error = 'Generation result was not persisted before the recovery window expired; manual review is required before retrying.'; } });
+      await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[scene.number - 1]; if (current?.status === 'submitted' && !current.videoPathname) { current.status = 'failed'; delete current.generation.startedAt; current.error = 'Generation result was not persisted before the recovery window expired; manual review is required before retrying.'; } });
       console.error('[DirectMovie] stale paid scene blocked from automatic retry', { orderId, sceneNumber: scene.number });
     }
   }
