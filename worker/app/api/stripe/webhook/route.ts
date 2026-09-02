@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { readOrder, writeOrder } from '../../../../lib/orders';
 import { getStripe, isStripeConfigured } from '../../../../lib/stripe';
 import { startPaidFulfillment } from '../../../../lib/paid-fulfillment-workflow';
+import { claimStripeWebhookEvent } from '../../../../lib/ai-ledger';
 
 function activeWebhookSecret() {
   if (process.env.STRIPE_CHECKOUT_MODE === 'test') return process.env.STRIPE_TEST_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET;
@@ -18,6 +19,10 @@ export async function POST(request: Request) {
   const session = event.data.object as Stripe.Checkout.Session; const orderId = session.metadata?.orderId;
   if (!orderId || session.payment_status !== 'paid') return NextResponse.json({ received: true });
   const order = await readOrder(orderId); if (!order) return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
+  if (!(await claimStripeWebhookEvent(event.id))) {
+    console.info('[DirectMovie] duplicate Stripe webhook ignored', { eventId: event.id });
+    return NextResponse.json({ received: true, duplicate: true });
+  }
   const paid = { ...order, status: 'ready-for-fulfillment' as const, continuationStatus: order.continuationStatus === 'planned' ? 'planned' as const : 'ready' as const, purchase: { status: 'paid' as const, checkoutSessionId: session.id, paidAt: new Date().toISOString(), resumeFromScene: 7 } };
   await writeOrder(paid);
   await startPaidFulfillment(orderId);
