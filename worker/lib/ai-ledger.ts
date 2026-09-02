@@ -14,13 +14,14 @@ function ensureSchema() {
       order_id TEXT NOT NULL,
       scene_number INTEGER NOT NULL CHECK (scene_number BETWEEN 7 AND 18),
       state TEXT NOT NULL CHECK (state IN ('requested', 'completed', 'failed')),
+      operation JSONB,
       blob_pathname TEXT,
       error TEXT,
       requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       completed_at TIMESTAMPTZ,
       PRIMARY KEY (order_id, scene_number)
     )
-  `.then(() => undefined);
+  `.then(() => sql()`ALTER TABLE ai_generation_ledger ADD COLUMN IF NOT EXISTS operation JSONB`).then(() => undefined);
   return schema;
 }
 
@@ -33,6 +34,14 @@ export async function claimPaidSceneGeneration(orderId: string, sceneNumber: num
     RETURNING order_id
   `;
   return rows.length === 1;
+}
+
+export async function recordPaidSceneOperation(orderId: string, sceneNumber: number, operation: unknown) {
+  await sql()`
+    UPDATE ai_generation_ledger
+    SET operation = ${JSON.stringify(operation)}::jsonb
+    WHERE order_id = ${orderId} AND scene_number = ${sceneNumber}
+  `;
 }
 
 export async function recordPaidSceneCompletion(orderId: string, sceneNumber: number, blobPathname: string) {
