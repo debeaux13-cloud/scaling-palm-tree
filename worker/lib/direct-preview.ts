@@ -34,6 +34,7 @@ async function assembleVerifiedStoredPreview(orderId: string) { const order = aw
 async function generateScene(orderId: string, sceneNumber: number, fulfillment = false) {
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found'); const scene = order.scenes[sceneNumber - 1]; if (!scene) throw new Error(`Scene ${sceneNumber} not found`);
   if (fulfillment && order.purchase.status !== 'paid') throw new Error(`blocked unpaid fulfillment scene ${sceneNumber}`);
+  if (fulfillment && process.env.AI_PAID_GENERATION_DISABLED === 'true') throw new Error('Paid AI generation is disabled by the emergency kill switch.');
   if (scene.status === 'completed' && scene.videoPathname) return;
   if (await recoverStoredScene(orderId, sceneNumber)) return;
   if (scene.status === 'submitted') return;

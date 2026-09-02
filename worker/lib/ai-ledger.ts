@@ -9,19 +9,27 @@ function sql() {
 let schema: Promise<void> | undefined;
 
 function ensureSchema() {
-  schema ??= sql()`
-    CREATE TABLE IF NOT EXISTS ai_generation_ledger (
-      order_id TEXT NOT NULL,
-      scene_number INTEGER NOT NULL CHECK (scene_number BETWEEN 7 AND 18),
-      state TEXT NOT NULL CHECK (state IN ('requested', 'completed', 'failed')),
-      operation JSONB,
-      blob_pathname TEXT,
-      error TEXT,
-      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      completed_at TIMESTAMPTZ,
-      PRIMARY KEY (order_id, scene_number)
-    )
-  `.then(() => sql()`ALTER TABLE ai_generation_ledger ADD COLUMN IF NOT EXISTS operation JSONB`).then(() => undefined);
+  schema ??= Promise.all([
+    sql()`
+      CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+        event_id TEXT PRIMARY KEY,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    sql()`
+      CREATE TABLE IF NOT EXISTS ai_generation_ledger (
+        order_id TEXT NOT NULL,
+        scene_number INTEGER NOT NULL CHECK (scene_number BETWEEN 7 AND 18),
+        state TEXT NOT NULL CHECK (state IN ('requested', 'completed', 'failed')),
+        operation JSONB,
+        blob_pathname TEXT,
+        error TEXT,
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        PRIMARY KEY (order_id, scene_number)
+      )
+    `,
+  ]).then(async () => { await sql()`ALTER TABLE ai_generation_ledger ADD COLUMN IF NOT EXISTS operation JSONB`; });
   return schema;
 }
 
@@ -89,6 +97,16 @@ export async function authorizeManualPaidSceneRetry(orderId: string, sceneNumber
       RETURNING id
     )
     SELECT id FROM audit
+  `;
+  return rows.length === 1;
+}
+
+export async function claimStripeWebhookEvent(eventId: string) {
+  await ensureSchema();
+  const rows = await sql()`
+    INSERT INTO stripe_webhook_events (event_id) VALUES (${eventId})
+    ON CONFLICT (event_id) DO NOTHING
+    RETURNING event_id
   `;
   return rows.length === 1;
 }
