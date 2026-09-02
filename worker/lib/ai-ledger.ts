@@ -59,3 +59,36 @@ export async function recordPaidSceneFailure(orderId: string, sceneNumber: numbe
     WHERE order_id = ${orderId} AND scene_number = ${sceneNumber}
   `;
 }
+
+export async function getPaidSceneOperation(orderId: string, sceneNumber: number) {
+  await ensureSchema();
+  const rows = await sql()`SELECT operation FROM ai_generation_ledger WHERE order_id = ${orderId} AND scene_number = ${sceneNumber}`;
+  return rows[0]?.operation as unknown | undefined;
+}
+
+export async function authorizeManualPaidSceneRetry(orderId: string, sceneNumber: number, reason: string, adminId: string) {
+  await ensureSchema();
+  await sql()`
+    CREATE TABLE IF NOT EXISTS ai_generation_retry_audit (
+      id BIGSERIAL PRIMARY KEY,
+      order_id TEXT NOT NULL,
+      scene_number INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      admin_id TEXT NOT NULL,
+      authorized_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  const rows = await sql()`
+    WITH removed AS (
+      DELETE FROM ai_generation_ledger
+      WHERE order_id = ${orderId} AND scene_number = ${sceneNumber} AND state = 'failed'
+      RETURNING order_id, scene_number
+    ), audit AS (
+      INSERT INTO ai_generation_retry_audit (order_id, scene_number, reason, admin_id)
+      SELECT order_id, scene_number, ${reason}, ${adminId} FROM removed
+      RETURNING id
+    )
+    SELECT id FROM audit
+  `;
+  return rows.length === 1;
+}
