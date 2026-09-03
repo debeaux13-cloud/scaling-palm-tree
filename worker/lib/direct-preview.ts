@@ -40,17 +40,12 @@ async function generateScene(orderId: string, sceneNumber: number, fulfillment =
   if (scene.status === 'submitted') return;
   if (fulfillment && scene.status === 'failed') throw new Error(`Scene ${sceneNumber} requires manual review before another paid generation attempt.`);
   if (fulfillment && scene.generation.attempts >= MAX_PAID_SCENE_ATTEMPTS) throw new Error(`Scene ${sceneNumber} reached the paid generation limit; manual review is required.`);
-  // Preview stays capped. Paid scenes are capped at one provider request; an expired request
-  // is held for manual review rather than automatically charging for another generation.
   if (!fulfillment && scene.generation.attempts >= MAX_PREVIEW_SCENE_ATTEMPTS) throw new Error(`Scene ${sceneNumber} reached ${MAX_PREVIEW_SCENE_ATTEMPTS} preview attempts; manual review required.`);
   let claimed = false;
   await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[sceneNumber - 1]; if (!current) return; if (fulfillment && fresh.purchase.status !== 'paid') return; if ((current.status === 'completed' && current.videoPathname) || current.status === 'submitted' || (fulfillment && (current.status === 'failed' || current.generation.attempts >= MAX_PAID_SCENE_ATTEMPTS)) || (!fulfillment && current.generation.attempts >= MAX_PREVIEW_SCENE_ATTEMPTS)) return; current.status = 'submitted'; current.generation.attempts += 1; current.generation.startedAt = new Date().toISOString(); delete current.error; fresh.status = fulfillment ? 'fulfillment-in-progress' : 'preview-in-progress'; claimed = true; });
   if (!claimed) return;
   try {
-    if (fulfillment && !(await claimPaidSceneGeneration(orderId, sceneNumber))) {
-      console.warn('[DirectMovie] duplicate paid scene generation blocked by ledger', { orderId, sceneNumber });
-      return;
-    }
+    if (fulfillment && !(await claimPaidSceneGeneration(orderId, sceneNumber))) { console.warn('[DirectMovie] duplicate paid scene generation blocked by ledger', { orderId, sceneNumber }); return; }
     console.info('[DirectMovie] generation authorized for scene', { orderId, sceneNumber, fulfillment, attempt: scene.generation.attempts + 1 }); const inputReferences = await Promise.all(order.subjectPhotoPathnames.slice(0, 3).map(async (pathname) => { const validUntil = Date.now() + 15 * 60 * 1000; const token = await issueSignedToken({ pathname, operations: ['get'], validUntil }); return (await presignUrl(token, { pathname, operation: 'get', access: 'private', validUntil, useCache: false })).presignedUrl; })); const identityBrief = 'Use character1, character2, and character3 for the supplied customer-photo references in order. Preserve recognizable facial features or pet breed, coat color, markings, eyes, ears, body proportions, hair, clothing, and accessories across scenes. Create premium stylized 3D CGI cinematic animation with expressive character movement, soft feature-film lighting, dimensional environments, natural shadows, and active camera storytelling. All spoken dialogue and narration must be natural English only, using one consistent neutral American English voice/accent throughout the movie. Do not switch languages or accents.'; const started = await startVideo({ model, prompt: `${identityBrief} ${scene.videoPrompt}`, inputReferences, aspectRatio: '16:9', resolution: '1280x720', duration: 10, generateAudio: true, providerOptions: { alibaba: { shotType: 'single' } } }); if (fulfillment) await recordPaidSceneOperation(orderId, sceneNumber, started.operation); const deadline = Date.now() + 600_000; let result: CompletedVideoStatus | undefined; while (Date.now() < deadline) { const status = await getVideoStatus(model, { operation: started.operation }); if (status.status === 'completed') { result = status; break; } if (status.status === 'error') throw new Error(`Wan generation failed for scene ${sceneNumber}`); await new Promise((resolve) => setTimeout(resolve, 5000)); } if (!result) throw new Error(`Wan generation timed out for scene ${sceneNumber}`); const video = result.videos[0]; if (!video) throw new Error(`Wan returned no video for scene ${sceneNumber}`); const videoBytes = video.type === 'binary' ? video.data : video.type === 'base64' ? Uint8Array.from(Buffer.from(video.data, 'base64')) : new Uint8Array(await (await fetch(video.url)).arrayBuffer()); const pathname = scenePathname(orderId, sceneNumber); const body = new Blob([new Uint8Array(videoBytes).buffer], { type: video.mediaType ?? 'video/mp4' }); await put(pathname, body, { access: 'private', contentType: video.mediaType ?? 'video/mp4', addRandomSuffix: false, allowOverwrite: true }); await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[sceneNumber - 1]; if (!current) return; current.videoPathname = pathname; current.status = 'completed'; delete current.generation.startedAt; delete current.error; }); if (fulfillment) await recordPaidSceneCompletion(orderId, sceneNumber, pathname); }
   catch (error) { const message = error instanceof Error ? error.message : String(error); if (fulfillment) await recordPaidSceneFailure(orderId, sceneNumber, message).catch(() => undefined); await mutateOrder(orderId, (fresh) => { const current = fresh.scenes[sceneNumber - 1]; if (!current) return; current.status = fulfillment ? 'failed' : 'ready'; delete current.generation.startedAt; current.error = message; }); console.error('[DirectMovie] scene generation failed', { orderId, sceneNumber, error }); throw error; }
 }
@@ -66,24 +61,31 @@ export async function runDirectFulfillment(orderId: string) {
   for (let index = 0; index < sceneNumbers.length; index += FULFILLMENT_CONCURRENCY) {
     let retries = 0;
     while (true) {
-      try {
-        await generateScene(orderId, sceneNumbers[index], true);
-        break;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!message.includes('429') || retries >= MAX_PAID_RATE_LIMIT_RETRIES) throw error;
-        retries += 1;
-        console.warn('[DirectMovie] paid scene rate-limited; waiting before retry', { orderId, sceneNumber: sceneNumbers[index], retries });
-        await new Promise((resolve) => setTimeout(resolve, PAID_VIDEO_REQUEST_INTERVAL_MS));
-      }
+      try { await generateScene(orderId, sceneNumbers[index], true); break; }
+      catch (error) { const message = error instanceof Error ? error.message : String(error); if (!message.includes('429') || retries >= MAX_PAID_RATE_LIMIT_RETRIES) throw error; retries += 1; console.warn('[DirectMovie] paid scene rate-limited; waiting before retry', { orderId, sceneNumber: sceneNumbers[index], retries }); await new Promise((resolve) => setTimeout(resolve, PAID_VIDEO_REQUEST_INTERVAL_MS)); }
     }
-    if (index + FULFILLMENT_CONCURRENCY < sceneNumbers.length) {
-      await new Promise((resolve) => setTimeout(resolve, PAID_VIDEO_REQUEST_INTERVAL_MS));
-    }
+    if (index + FULFILLMENT_CONCURRENCY < sceneNumbers.length) await new Promise((resolve) => setTimeout(resolve, PAID_VIDEO_REQUEST_INTERVAL_MS));
   }
+
+  // Blob storage is the authority for completed scene assets. Verify every final clip
+  // immediately before assembly, then repair all order scene paths in ONE mutation so
+  // concurrent polling/reconciliation cannot leave assembly reading a partially repaired order.
+  const storedChecks = await Promise.all(Array.from({ length: 18 }, async (_, index) => ({ number: index + 1, exists: await storedSceneExists(orderId, index + 1) })));
+  const missingStored = storedChecks.filter((check) => !check.exists).map((check) => check.number);
+  if (missingStored.length) throw new Error(`Cannot assemble final movie; stored MP4 missing for scenes: ${missingStored.join(', ')}`);
+  await mutateOrder(orderId, (fresh) => {
+    storedChecks.forEach(({ number }) => {
+      const scene = fresh.scenes[number - 1];
+      if (!scene) return;
+      scene.videoPathname = scenePathname(orderId, number);
+      scene.status = 'completed';
+      delete scene.generation.startedAt;
+      delete scene.error;
+    });
+  });
   const order = await readOrder(orderId); if (!order) throw new Error('Order not found');
   const clips = order.scenes.slice(0, 18).map((scene) => ({ number: scene.number, pathname: scene.videoPathname!, narration: scene.narration }));
-  if (clips.some((clip) => !clip.pathname)) throw new Error('Cannot assemble final movie before all 18 scenes are complete');
+  if (clips.some((clip) => !clip.pathname)) throw new Error('Cannot assemble final movie after verified storage reconciliation');
   const assets = await assembleMovie(orderId, clips, 'final');
   await mutateOrder(orderId, (fresh) => { fresh.finalMoviePathname = assets.moviePathname; fresh.finalStorybook = { pageCount: 18, status: 'ready', pathname: assets.storybookPathname }; fresh.status = 'complete'; });
 }
