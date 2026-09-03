@@ -10,7 +10,7 @@ export async function assembleMovie(orderId: string, clips: { number: number; pa
   const sandbox = await Sandbox.create({ image: 'vercel/sandbox/arch:latest', persistent: false, timeout: 15 * 60 * 1000, resources: { vcpus: 2 } });
   try {
     const installPackages = async (...packages: string[]) => {
-      const install = await sandbox.runCommand('bash', ['-lc', `pacman -Sy --noconfirm ${packages.map(shell).join(' ')}`]);
+      const install = await sandbox.runCommand({ cmd: 'bash', args: ['-lc', `pacman -Sy --noconfirm ${packages.map(shell).join(' ')}`], sudo: true });
       if (install.exitCode !== 0) throw new Error(await install.stderr());
     };
     if ((await sandbox.runCommand('bash', ['-lc', 'command -v ffmpeg >/dev/null'])).exitCode !== 0) await installPackages('ffmpeg');
