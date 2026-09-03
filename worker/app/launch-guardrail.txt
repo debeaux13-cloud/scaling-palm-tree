@@ -1,0 +1,1 @@
+Do not modify Creator, checkout, Stripe, API routes, rendering, storage, environment variables, or workers as part of this storefront visual rebuild.
