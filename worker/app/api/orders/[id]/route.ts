@@ -24,10 +24,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     order = await readOrder(id);
     if (!order) return NextResponse.json({ error: 'order not found' }, { status: 404 });
 
-    // Final assembly can successfully upload the one continuous MP4 even if a workflow/order
-    // persistence write is lost afterward. Blob storage is authoritative for the finished asset:
-    // when the final MP4 physically exists, repair the stale order so the customer UI immediately
-    // switches from scene progress to the single final-movie player. This never generates AI media.
     if (!order.finalMoviePathname) {
       const finalMoviePathname = `studio/orders/${id}/final/movie.mp4`;
       let finalMovieExists = false;
@@ -37,7 +33,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         order = await mutateOrder(id, (fresh) => {
           fresh.finalMoviePathname = finalMoviePathname;
           fresh.status = 'complete';
-          fresh.continuationStatus = 'complete';
+          // continuationStatus has no `complete` member; `planned` is the terminal successful state.
+          fresh.continuationStatus = 'planned';
         });
         console.info('[DirectMovie] final movie reconciled from Blob; customer player unlocked', { orderId: id, finalMoviePathname });
       }
@@ -47,7 +44,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const complete = order.status === 'complete' || Boolean(order.finalMoviePathname);
   if (paid && !complete) {
     let claimed = false;
-
     order = await mutateOrder(id, (fresh) => {
       const active = fresh.scenes.some((scene) => scene.number > 6 && scene.status === 'submitted');
       if (fresh.purchase.status !== 'paid' || fresh.status === 'complete' || fresh.finalMoviePathname || active) return;
@@ -55,7 +51,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       fresh.continuationStatus = 'planning';
       claimed = true;
     });
-
     if (claimed) {
       console.info('[DirectMovie] paid runner atomically claimed', { orderId: id });
       try { await startPaidFulfillment(id); }
@@ -65,6 +60,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       }
     }
   }
-
   return NextResponse.json({ order, progress: orderProgress(order) });
 }
