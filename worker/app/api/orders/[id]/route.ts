@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { BlobNotFoundError, head } from '@vercel/blob';
 import { getGuestPreviewOwner, getOwner } from '../../../../lib/owner';
 import { mutateOrder, orderProgress, readOrder } from '../../../../lib/orders';
 import { reconcileStalePaidScenes } from '../../../../lib/direct-preview';
@@ -22,25 +23,34 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     await reconcileStalePaidScenes(id);
     order = await readOrder(id);
     if (!order) return NextResponse.json({ error: 'order not found' }, { status: 404 });
+
+    if (!order.finalMoviePathname) {
+      const finalMoviePathname = `studio/orders/${id}/final/movie.mp4`;
+      let finalMovieExists = false;
+      try { await head(finalMoviePathname); finalMovieExists = true; }
+      catch (error) { if (!(error instanceof BlobNotFoundError)) throw error; }
+      if (finalMovieExists) {
+        order = await mutateOrder(id, (fresh) => {
+          fresh.finalMoviePathname = finalMoviePathname;
+          fresh.status = 'complete';
+          // continuationStatus has no `complete` member; `planned` is the terminal successful state.
+          fresh.continuationStatus = 'planned';
+        });
+        console.info('[DirectMovie] final movie reconciled from Blob; customer player unlocked', { orderId: id, finalMoviePathname });
+      }
+    }
   }
 
   const complete = order.status === 'complete' || Boolean(order.finalMoviePathname);
   if (paid && !complete) {
     let claimed = false;
-
     order = await mutateOrder(id, (fresh) => {
       const active = fresh.scenes.some((scene) => scene.number > 6 && scene.status === 'submitted');
       if (fresh.purchase.status !== 'paid' || fresh.status === 'complete' || fresh.finalMoviePathname || active) return;
-
-      // `planning` is an active durable ownership lock. Polling must never reclaim it:
-      // doing so starts duplicate workflows and creates an assembly stampede. Only an
-      // unclaimed/failed order may start a new paid workflow. Workflow failure handling
-      // explicitly changes planning -> failed, which makes a later poll eligible to retry.
       if (fresh.continuationStatus === 'planning') return;
       fresh.continuationStatus = 'planning';
       claimed = true;
     });
-
     if (claimed) {
       console.info('[DirectMovie] paid runner atomically claimed', { orderId: id });
       try { await startPaidFulfillment(id); }
@@ -50,6 +60,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       }
     }
   }
-
   return NextResponse.json({ order, progress: orderProgress(order) });
 }
