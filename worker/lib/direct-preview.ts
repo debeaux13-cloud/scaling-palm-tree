@@ -87,5 +87,5 @@ export async function runDirectFulfillment(orderId: string) {
   const clips = order.scenes.slice(0, 18).map((scene) => ({ number: scene.number, pathname: scene.videoPathname!, narration: scene.narration }));
   if (clips.some((clip) => !clip.pathname)) throw new Error('Cannot assemble final movie after verified storage reconciliation');
   const assets = await assembleMovie(orderId, clips, 'final');
-  await mutateOrder(orderId, (fresh) => { fresh.finalMoviePathname = assets.moviePathname; fresh.finalStorybook = { pageCount: 18, status: 'ready', pathname: assets.storybookPathname }; fresh.status = 'complete'; });
+  await mutateOrder(orderId, (fresh) => { fresh.finalMoviePathname = assets.moviePathname; fresh.status = 'complete'; });
 }
