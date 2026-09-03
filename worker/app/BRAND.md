@@ -1,0 +1,2 @@
+# Main Character Studios by Tiffani
+Visual direction: cinematic modern 3D computer-animation; warm magical lighting; expressive dimensional people and pets; colorful immersive story worlds; premium but joyful; family and pet centered. Do not restore previous storefront branding or artwork.
