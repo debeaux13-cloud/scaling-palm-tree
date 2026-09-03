@@ -1,0 +1,9 @@
+REQUIRED ACTUAL USER-PROVIDED ASSETS — DO NOT SUBSTITUTE OR FAKE
+
+1. mcs-logo.jpg — the exact circular Main Character Studios by Tiffani film-reel/starfield logo supplied by Tiffani.
+2. people-pet-style.jpg — the exact supplied stylized 3D woman-with-tabby-cat image.
+3. pet-style.jpg — the exact supplied stylized 3D three-dog image with the brown Doberman centered.
+
+These are STILL IMAGES. Do not render play buttons or imply they are demo videos.
+Do not generate replacement artwork, CSS imitation logos, fake medallions, or gradient placeholders.
+When these binary files are present, use the exact logo in navigation/hero branding and use the two style images as visual examples.
