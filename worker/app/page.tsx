@@ -1,20 +1,21 @@
 import { Creator } from './creator';
-import { Hero } from './hero';
-import { DemoGallery } from './demo-gallery';
-import './storefront-template.css';
-import './hero.css';
-import './demo-gallery.css';
-import './launch-final.css';
+import './fresh-storefront.css';
 
-export default function Home() {
-  return (
-    <main id="top">
-      <Hero />
-      <section id="how-it-works" className="live-note"><h2>How It Works</h2><p>Upload your photo, choose the vibe, watch your free 1-minute preview, then unlock the rest of the same cohesive movie.</p></section>
-      <section id="pricing" className="live-note"><h2>$49 · 3-Minute Movie</h2><p>Includes the free 1-minute preview. $79 · 5-Minute Movie — coming soon.</p></section>
-      <DemoGallery />
-      <section id="about" className="live-note"><h2>Everyone deserves a story where they’re the star.</h2><p>Create as many different Main Character Studios stories as you want.</p></section>
-      <Creator />
-    </main>
-  );
-}
+const demos = [
+  ['Fantasy Worlds','https://raw.githubusercontent.com/debeaux13-cloud/scaling-palm-tree/main/bb2d76adcbaed338e7f9c7049a2a874c76e4ef2e842b6407d0cefd8dea23db44.MP4'],
+  ['Pet Adventures','https://raw.githubusercontent.com/debeaux13-cloud/scaling-palm-tree/main/92c188437820364e6cbd74dc26272c64092da7841d3ab6b82b511dac740aa7da.MP4'],
+  ['Family Adventures','https://raw.githubusercontent.com/debeaux13-cloud/scaling-palm-tree/main/f080f5f16d6ab3340e077d9279ec37798ed60653b0015801afdc9ad2ecb4c0e8.MP4'],
+  ['Sci-Fi Stories','https://raw.githubusercontent.com/debeaux13-cloud/scaling-palm-tree/main/29f2ba617ca782724186fc33b14c5270579793f4d16ed7f27337fcfa40bf20b8.MP4'],
+  ['Special Moments','https://raw.githubusercontent.com/debeaux13-cloud/scaling-palm-tree/main/f6eb27ddf0095727546f2458b95b414bfd131f7992c15efeff9babcbf8334a48.MP4']
+];
+
+export default function Home(){return <main className="fresh-site" id="top">
+<header className="fresh-header"><div className="fresh-brand"><img className="fresh-logo" src="https://raw.githubusercontent.com/debeaux13-cloud/scaling-palm-tree/main/1788448191055.png" alt="Main Character Studios by Tiffani"/><div><strong>Main Character Studios</strong><em>by Tiffani</em><small>WHERE YOUR STORY BECOMES A MOVIE</small></div></div><nav className="fresh-nav"><a href="#top">Home</a><a href="#how">How It Works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="#studio">Create</a><span className="pill">✦ AI-SELF COMING SOON</span></nav></header>
+<section className="fresh-hero"><div><div className="fresh-kicker">YOUR PEOPLE. YOUR PETS. THEIR ADVENTURE.</div><h1>Make their photo the beginning of <em>something magical.</em></h1><p className="fresh-lede">Main Character Studios turns the people and pets you love into a warm, stylized 3D animated story with one connected adventure from beginning to end.</p><div className="fresh-chips"><span>✦ 60-second preview free</span><span>🎬 3-minute movie · $49</span><span>∞ Make more anytime</span></div><div className="fresh-actions"><a className="fresh-btn gold" href="#studio">START A STORY ✦</a><a className="fresh-btn purple" href="#examples">SEE THE MOVIE STYLE</a></div></div><div className="fresh-art"><img className="fresh-art-logo" src="https://raw.githubusercontent.com/debeaux13-cloud/scaling-palm-tree/main/1788448191055.png" alt="Main Character Studios"/><i className="spark-road"/></div></section>
+<div className="fresh-strip"><section className="fresh-how" id="how"><h2 className="fresh-title">From photo to movie magic</h2><p className="fresh-sub">Simple enough to start in minutes. Magical enough to keep forever.</p><div className="steps"><div className="step"><b>1</b><strong>Upload</strong><span>Add up to 3 photos.</span></div><div className="step"><b>2</b><strong>Choose a vibe</strong><span>Funny, fantasy, adventure and more.</span></div><div className="step"><b>3</b><strong>Preview free</strong><span>Watch the first 60 seconds.</span></div><div className="step"><b>4</b><strong>Unlock</strong><span>Love it? Buy the rest for $49.</span></div><div className="step"><b>5</b><strong>Keep it</strong><span>Download your finished movie.</span></div></div></section></div>
+<section className="fresh-pricing" id="pricing"><h2 className="fresh-title">Pick your story length</h2><p className="fresh-sub">Start with the 3-minute movie today. The longer adventure is on the way.</p><div className="price-grid"><article className="price-card live"><div className="price">$49</div><h3>3-Minute Movie</h3><p>One cohesive animated adventure starring your person, family or pets. Includes your free 60-second preview.</p><a className="fresh-btn purple" href="#studio">CHOOSE 3 MINUTES</a></article><article className="price-card soon"><div className="price">$79</div><h3>5-Minute Movie</h3><p>A longer adventure with more story, more scenes and more room for the magic.</p><strong>COMING SOON ✦</strong></article></div></section>
+<section className="fresh-demo" id="examples"><h2 className="fresh-title">Pick a world. Become the story.</h2><p className="fresh-sub">Real 5-second style samples from Main Character Studios.</p><div className="demo-grid">{demos.map(([name,src])=><article className="demo-card" key={name}><video src={src} controls muted playsInline preload="metadata"/><strong>{name}</strong></article>)}</div></section>
+<section className="fresh-repeat"><h2>One story today. Another whenever inspiration strikes.</h2><p>There is no one-story limit. Come back and create as many different adventures as you want.</p><a className="fresh-btn gold" href="#studio">MAKE THEM THE MAIN CHARACTER ✦</a></section>
+<section className="fresh-studio" id="studio"><Creator/></section>
+<footer className="fresh-footer"><strong>Everyone deserves a story where they’re the star.</strong>Main Character Studios by Tiffani · Personalized cinematic animated stories</footer>
+</main>}
