@@ -1,0 +1,3 @@
+import { ImageResponse } from 'next/og';
+export const size={width:1200,height:630}; export const contentType='image/png';
+export default function Image(){return new ImageResponse(<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',background:'linear-gradient(135deg,#4b3191,#b657aa 55%,#f3a267)',color:'white',fontFamily:'serif'}}><div style={{fontSize:28,letterSpacing:8}}>MAIN CHARACTER</div><div style={{fontSize:94,fontWeight:700}}>STUDIOS</div><div style={{fontSize:35,fontStyle:'italic',color:'#ffe4a4'}}>Make someone you love the main character.</div></div>)}
