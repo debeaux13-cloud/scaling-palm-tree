@@ -1,0 +1,1 @@
+import type { MetadataRoute } from 'next'; export default function sitemap():MetadataRoute.Sitemap{return [{url:'https://main-character-studios.vercel.app',changeFrequency:'weekly',priority:1}]}
