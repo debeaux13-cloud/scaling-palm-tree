@@ -31,12 +31,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     order = await mutateOrder(id, (fresh) => {
       const active = fresh.scenes.some((scene) => scene.number > 6 && scene.status === 'submitted');
-      const stillMissing = fresh.scenes.some((scene) => scene.number > 6 && !(scene.status === 'completed' && scene.videoPathname));
-      if (fresh.purchase.status !== 'paid' || fresh.status === 'complete' || fresh.finalMoviePathname || active || !stillMissing) return;
+      if (fresh.purchase.status !== 'paid' || fresh.status === 'complete' || fresh.finalMoviePathname || active) return;
 
       if (fresh.continuationStatus === 'planning') releasedOrphan = true;
       // This same write owns the stale-lock takeover and runner claim. Do not expose an
-      // intermediate `ready` state for another polling request to race against.
+      // intermediate `ready` state for another polling request to race against. The paid
+      // workflow also owns final assembly, so it must run even when reconciliation has
+      // already found every stored scene and there is nothing left to generate.
       fresh.continuationStatus = 'planning';
       claimed = true;
     });
