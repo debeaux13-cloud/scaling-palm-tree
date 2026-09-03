@@ -1,0 +1,2 @@
+# September 3 visual rebuild
+Customer-facing visual layer only. Existing Creator component and API/payment/render pipeline intentionally untouched. New direction: bright cinematic modern 3D animated story worlds, new MCS mark, new storefront composition, new social/app branding.

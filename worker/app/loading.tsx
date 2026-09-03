@@ -1,0 +1,1 @@
+export default function Loading(){return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',background:'#fff8ed',color:'#704bd0',fontFamily:'Georgia',fontSize:24}}>✦ Building the world…</main>}

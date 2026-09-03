@@ -1,0 +1,1 @@
+export default function Head(){return <><title>Main Character Studios by Tiffani | Personalized Animated Stories</title><meta name="description" content="Turn your favorite people and pets into the stars of personalized cinematic 3D animated stories."/><meta name="theme-color" content="#7656d9"/></>}
