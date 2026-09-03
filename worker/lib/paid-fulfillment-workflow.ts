@@ -1,9 +1,17 @@
 import { start } from 'workflow/api';
 import { runDirectFulfillment } from './direct-preview';
+import { mutateOrder } from './orders';
 
 async function fulfillPaidOrder(orderId: string) {
   'use step';
-  await runDirectFulfillment(orderId);
+  try {
+    await runDirectFulfillment(orderId);
+  } catch (error) {
+    await mutateOrder(orderId, (order) => {
+      if (order.continuationStatus === 'planning') order.continuationStatus = 'failed';
+    });
+    throw error;
+  }
 }
 
 export async function paidFulfillmentWorkflow(orderId: string) {
