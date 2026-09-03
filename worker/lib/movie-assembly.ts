@@ -7,12 +7,10 @@ async function signedPut(pathname: string, type: string) { const token = await i
 function shell(value: string) { return `'${value.replaceAll("'", "'\\''")}'`; }
 export async function assembleMovie(orderId: string, clips: { number: number; pathname: string; narration: string }[], kind: 'preview' | 'final') {
   const root = `/tmp/mcs-${orderId}-${kind}`; const output = `studio/orders/${orderId}/${kind}/movie.mp4`; const pdf = `studio/orders/${orderId}/final/storybook.pdf`;
-  const sandbox = await Sandbox.create({ image: 'vercel/sandbox/universal:latest', persistent: false, timeout: 15 * 60 * 1000, resources: { vcpus: 2 } });
+  const sandbox = await Sandbox.create({ image: 'vercel/sandbox/arch:latest', persistent: false, timeout: 15 * 60 * 1000, resources: { vcpus: 2 } });
   try {
     const installPackages = async (...packages: string[]) => {
-      const update = await sandbox.runCommand({ cmd: 'apt-get', args: ['update'], sudo: true });
-      if (update.exitCode !== 0) throw new Error(await update.stderr());
-      const install = await sandbox.runCommand({ cmd: 'apt-get', args: ['install', '-y', '--no-install-recommends', ...packages], sudo: true });
+      const install = await sandbox.runCommand('bash', ['-lc', `pacman -Sy --noconfirm ${packages.map(shell).join(' ')}`]);
       if (install.exitCode !== 0) throw new Error(await install.stderr());
     };
     if ((await sandbox.runCommand('bash', ['-lc', 'command -v ffmpeg >/dev/null'])).exitCode !== 0) await installPackages('ffmpeg');
