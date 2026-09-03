@@ -1,6 +1,7 @@
 import { Creator } from './creator';
 import { OneMinuteCopy } from './one-minute-copy';
 import './storefront-template.css';
+import './launch-final.css';
 
 const steps=[['↑','1. Upload','Add photos and pick your vibe'],['✦','2. We Create','AI crafts your custom animated story'],['◇','3. Preview','Watch the first 1 minute free'],['▣','4. Checkout','Secure payment with Stripe'],['✦','5. We Finish','We complete your full movie'],['↓','6. You Enjoy','Download and keep your movie']];
 export default function Home(){return <main className="template-page"><OneMinuteCopy/>
